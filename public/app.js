@@ -128,6 +128,37 @@ class TermixDashboard {
       window.termix.onToggleTheme(() => this.toggleTheme());
     }
 
+    if (window.termix.onNewTerminal) {
+      window.termix.onNewTerminal(() => this.createNewTerminal());
+    }
+
+    if (window.termix.onToggleBroadcast) {
+      window.termix.onToggleBroadcast(() => {
+        const isHidden = this.broadcastBarEl.classList.toggle('hidden');
+        if (!isHidden) {
+          this.broadcastInputEl.focus();
+        }
+      });
+    }
+
+    if (window.termix.onClearTerminal) {
+      window.termix.onClearTerminal(() => {
+        if (this.activeTerminalId) {
+          const inst = this.terminals.get(this.activeTerminalId);
+          if (inst && inst.term) {
+            inst.term.clear();
+            inst.focus();
+          }
+        }
+      });
+    }
+
+    if (window.termix.onShowAbout) {
+      window.termix.onShowAbout(() => {
+        this.helpModalEl.classList.remove('hidden');
+      });
+    }
+
     // Abre o primeiro terminal automaticamente
     setTimeout(() => {
       if (this.terminals.size === 0) {
@@ -689,6 +720,48 @@ class TerminalInstance {
 
     this.term.open(this.bodyEl);
 
+    // Gerenciador de atalhos de teclado (Cmd+C, Cmd+V, Cmd+A, Cmd+K)
+    this.term.attachCustomKeyEventHandler((e) => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const isCmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+      if (e.type === 'keydown') {
+        // Cmd+C / Ctrl+C: Copiar texto selecionado
+        if (isCmdOrCtrl && (e.code === 'KeyC' || e.key === 'c' || e.key === 'C')) {
+          if (this.term.hasSelection()) {
+            this.copySelection();
+            return false;
+          }
+          // No macOS, se Cmd+C for pressionado sem seleção ativa, previne apagar clipboard
+          if (isMac && e.metaKey) {
+            return false;
+          }
+          // Ctrl+C normal envia sinal SIGINT (\x03)
+          return true;
+        }
+
+        // Cmd+V / Ctrl+V: Colar da área de transferência
+        if (isCmdOrCtrl && (e.code === 'KeyV' || e.key === 'v' || e.key === 'V')) {
+          this.pasteFromClipboard();
+          return false;
+        }
+
+        // Cmd+A / Ctrl+A: Selecionar todo o buffer do terminal
+        if (isCmdOrCtrl && (e.code === 'KeyA' || e.key === 'a' || e.key === 'A')) {
+          this.term.selectAll();
+          return false;
+        }
+
+        // Cmd+K: Limpar terminal (padrão nativo do macOS)
+        if (isMac && e.metaKey && (e.code === 'KeyK' || e.key === 'k' || e.key === 'K')) {
+          this.term.clear();
+          return false;
+        }
+      }
+
+      return true;
+    });
+
     // Entrada do teclado enviada para o Electron IPC ou WebSocket
     this.term.onData((data) => {
       this.dashboard.sendInput(this.id, data);
@@ -703,6 +776,34 @@ class TerminalInstance {
       this.fit();
       this.focus();
     }, 50);
+  }
+
+  copySelection() {
+    const text = this.term.getSelection();
+    if (!text) return;
+
+    if (this.dashboard.isElectron && window.termix && window.termix.writeClipboard) {
+      window.termix.writeClipboard(text);
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+  }
+
+  async pasteFromClipboard() {
+    let text = '';
+    try {
+      if (this.dashboard.isElectron && window.termix && window.termix.readClipboard) {
+        text = await window.termix.readClipboard();
+      } else if (navigator.clipboard && navigator.clipboard.readText) {
+        text = await navigator.clipboard.readText();
+      }
+    } catch (err) {
+      console.warn('[Termix] Falha ao ler clipboard:', err);
+    }
+
+    if (text) {
+      this.dashboard.sendInput(this.id, text);
+    }
   }
 
   fit() {

@@ -209,26 +209,69 @@
     <div id="help-modal" class="modal-backdrop hidden">
       <div class="modal-card">
         <div class="modal-header">
-          <h3>Atalhos e Informações do Termix</h3>
+          <h3>Sobre o Termix</h3>
           <button class="btn-modal-close" id="btn-modal-close">✕</button>
         </div>
         <div class="modal-body">
+          <div class="modal-about-card">
+            <div class="about-header-info">
+              <div class="brand-logo-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="4 17 10 11 4 5"></polyline>
+                  <line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+              </div>
+              <div class="about-title-block">
+                <div class="about-title-row">
+                  <span class="about-app-name">Termix</span>
+                  <span class="about-version-badge">v1.0.0</span>
+                </div>
+                <p class="about-app-desc">Multi-Terminal Dashboard Desktop App para macOS</p>
+              </div>
+            </div>
+
+            <div class="about-meta-grid">
+              <div class="about-meta-item">
+                <span class="about-meta-label">Autor</span>
+                <span class="about-meta-value"><strong>Luiz Carvalho</strong></span>
+              </div>
+              <div class="about-meta-item">
+                <span class="about-meta-label">Licença</span>
+                <span class="about-meta-value badge-license">MIT License</span>
+              </div>
+            </div>
+          </div>
+
+          <h4 class="modal-section-title">Atalhos de Teclado</h4>
+
           <div class="shortcut-list">
             <div class="shortcut-row">
+              <span class="shortcut-desc">Copiar Seleção</span>
+              <span class="shortcut-keys"><kbd>⌘</kbd> + <kbd>C</kbd> ou <kbd>Ctrl</kbd> + <kbd>C</kbd></span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Colar da Área de Transferência</span>
+              <span class="shortcut-keys"><kbd>⌘</kbd> + <kbd>V</kbd> ou <kbd>Ctrl</kbd> + <kbd>V</kbd></span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Selecionar Tudo (Terminal/Input)</span>
+              <span class="shortcut-keys"><kbd>⌘</kbd> + <kbd>A</kbd> ou <kbd>Ctrl</kbd> + <kbd>A</kbd></span>
+            </div>
+            <div class="shortcut-row">
               <span class="shortcut-desc">Novo Terminal</span>
-              <span class="shortcut-keys"><kbd>Alt</kbd> + <kbd>T</kbd> ou <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd></span>
+              <span class="shortcut-keys"><kbd>⌘</kbd> + <kbd>T</kbd> ou <kbd>Alt</kbd> + <kbd>T</kbd></span>
             </div>
             <div class="shortcut-row">
               <span class="shortcut-desc">Alternar Barra de Broadcast</span>
-              <span class="shortcut-keys"><kbd>Alt</kbd> + <kbd>B</kbd></span>
+              <span class="shortcut-keys"><kbd>⌘</kbd> + <kbd>B</kbd> ou <kbd>Alt</kbd> + <kbd>B</kbd></span>
             </div>
             <div class="shortcut-row">
-              <span class="shortcut-desc">Maximizar / Restaurar Terminal Focado</span>
+              <span class="shortcut-desc">Maximizar / Restaurar Terminal</span>
               <span class="shortcut-keys"><kbd>Alt</kbd> + <kbd>M</kbd></span>
             </div>
             <div class="shortcut-row">
               <span class="shortcut-desc">Limpar Buffer do Terminal</span>
-              <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>L</kbd> ou Botão "Limpar"</span>
+              <span class="shortcut-keys"><kbd>⌘</kbd> + <kbd>K</kbd> ou <kbd>Ctrl</kbd> + <kbd>L</kbd></span>
             </div>
             <div class="shortcut-row">
               <span class="shortcut-desc">Renomear Aba/Bloco</span>
@@ -236,7 +279,7 @@
             </div>
           </div>
           <div class="modal-tech-info">
-            <p><strong>Stack Tecnológica:</strong> macOS zsh / bash • Node.js • node-pty • WebSockets (ws) • xterm.js com FitAddon & WebLinks.</p>
+            <p><strong>Stack Tecnológica:</strong> macOS zsh / bash • Electron • Node.js • node-pty • WebSockets (ws) • xterm.js com FitAddon & WebLinks.</p>
           </div>
         </div>
       </div>

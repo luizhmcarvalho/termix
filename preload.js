@@ -36,6 +36,15 @@ contextBridge.exposeInMainWorld('termix', {
     return ipcRenderer.invoke('system:info');
   },
 
+  // Área de transferência nativa (macOS Clipboard)
+  readClipboard: () => {
+    return ipcRenderer.invoke('clipboard:read');
+  },
+
+  writeClipboard: (text) => {
+    ipcRenderer.send('clipboard:write', text);
+  },
+
   // Registro de ouvintes de eventos enviados pelo backend Electron
   onCreated: (callback) => {
     const handler = (event, msg) => callback(msg);
@@ -65,5 +74,29 @@ contextBridge.exposeInMainWorld('termix', {
     const handler = () => callback();
     ipcRenderer.on('menu:toggle-theme', handler);
     return () => ipcRenderer.removeListener('menu:toggle-theme', handler);
+  },
+
+  onNewTerminal: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('menu:new-terminal', handler);
+    return () => ipcRenderer.removeListener('menu:new-terminal', handler);
+  },
+
+  onToggleBroadcast: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('menu:toggle-broadcast', handler);
+    return () => ipcRenderer.removeListener('menu:toggle-broadcast', handler);
+  },
+
+  onClearTerminal: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('menu:clear-terminal', handler);
+    return () => ipcRenderer.removeListener('menu:clear-terminal', handler);
+  },
+
+  onShowAbout: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('menu:show-about', handler);
+    return () => ipcRenderer.removeListener('menu:show-about', handler);
   }
 });

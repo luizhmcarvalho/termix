@@ -24,7 +24,7 @@
     "macos",
     "devops"
   ],
-  "author": "Termix Dev Team",
+  "author": "Luiz Carvalho",
   "license": "MIT",
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
@@ -42,7 +42,7 @@
   "build": {
     "appId": "com.factorivm.termix",
     "productName": "Termix",
-    "copyright": "Copyright © 2026 Termix Dev Team",
+    "copyright": "Copyright © 2026 Luiz Carvalho",
     "directories": {
       "output": "dist"
     },

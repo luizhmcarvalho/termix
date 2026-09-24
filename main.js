@@ -8,7 +8,7 @@ require('./fix-permissions');
 
 const path = require('path');
 const os = require('os');
-const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, clipboard } = require('electron');
 const pty = require('node-pty');
 
 // Configurações do shell no macOS
@@ -45,6 +45,24 @@ function createWindow() {
     mainWindow.show();
   });
 
+  // Habilita menu de contexto nativo com botão direito (Copiar, Colar, Selecionar Tudo)
+  mainWindow.webContents.on('context-menu', () => {
+    const contextMenuTemplate = [
+      { role: 'undo', label: 'Desfazer' },
+      { role: 'redo', label: 'Refazer' },
+      { type: 'separator' },
+      { role: 'cut', label: 'Recortar' },
+      { role: 'copy', label: 'Copiar' },
+      { role: 'paste', label: 'Colar' },
+      { role: 'pasteAndMatchStyle', label: 'Colar com o Mesmo Estilo' },
+      { role: 'delete', label: 'Excluir' },
+      { type: 'separator' },
+      { role: 'selectAll', label: 'Selecionar Tudo' }
+    ];
+    const contextMenu = Menu.buildFromTemplate(contextMenuTemplate);
+    contextMenu.popup();
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
     cleanupAllTerminals();
@@ -59,12 +77,31 @@ function createWindow() {
 function setupMenu() {
   const isMac = process.platform === 'darwin';
 
+  if (isMac) {
+    app.setAboutPanelOptions({
+      applicationName: 'Termix',
+      applicationVersion: '1.0.0',
+      version: '1.0.0',
+      copyright: 'Copyright © 2026 Luiz Carvalho',
+      authors: ['Luiz Carvalho'],
+      credits: 'Desenvolvido por Luiz Carvalho\nLicença: MIT'
+    });
+  }
+
   const template = [
     ...(isMac
       ? [{
           label: app.name,
           submenu: [
-            { role: 'about', label: 'Sobre o Termix' },
+            {
+              label: 'Sobre o Termix',
+              click: () => {
+                app.showAboutPanel();
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                  mainWindow.webContents.send('menu:show-about');
+                }
+              }
+            },
             { type: 'separator' },
             { role: 'services', label: 'Serviços' },
             { type: 'separator' },
@@ -76,6 +113,21 @@ function setupMenu() {
           ]
         }]
       : []),
+    {
+      label: 'Editar',
+      submenu: [
+        { role: 'undo', label: 'Desfazer' },
+        { role: 'redo', label: 'Refazer' },
+        { type: 'separator' },
+        { role: 'cut', label: 'Recortar' },
+        { role: 'copy', label: 'Copiar' },
+        { role: 'paste', label: 'Colar' },
+        { role: 'pasteAndMatchStyle', label: 'Colar com o Mesmo Estilo' },
+        { role: 'delete', label: 'Excluir' },
+        { type: 'separator' },
+        { role: 'selectAll', label: 'Selecionar Tudo' }
+      ]
+    },
     {
       label: 'Terminal',
       submenu: [
@@ -94,6 +146,15 @@ function setupMenu() {
           click: () => {
             if (mainWindow) {
               mainWindow.webContents.send('menu:toggle-broadcast');
+            }
+          }
+        },
+        {
+          label: 'Limpar Terminal',
+          accelerator: 'CmdOrCtrl+K',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu:clear-terminal');
             }
           }
         },
@@ -140,6 +201,22 @@ function setupMenu() {
               { role: 'front', label: 'Trazer Todas para Frente' }
             ]
           : [])
+      ]
+    },
+    {
+      label: 'Ajuda',
+      submenu: [
+        {
+          label: 'Sobre o Termix',
+          click: () => {
+            if (isMac) {
+              app.showAboutPanel();
+            }
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('menu:show-about');
+            }
+          }
+        }
       ]
     }
   ];
@@ -298,6 +375,22 @@ ipcMain.handle('system:info', () => {
     hostname: os.hostname(),
     activeCount: terminals.size
   };
+});
+
+// Acesso seguro e direto à área de transferência do macOS
+ipcMain.handle('clipboard:read', async () => {
+  try {
+    return await Promise.resolve(clipboard.readText());
+  } catch (err) {
+    console.error('[Termix Electron] Erro ao ler clipboard:', err);
+    return '';
+  }
+});
+
+ipcMain.on('clipboard:write', (event, text) => {
+  if (typeof text === 'string') {
+    clipboard.writeText(text);
+  }
 });
 
 // Ciclo de vida do Electron
