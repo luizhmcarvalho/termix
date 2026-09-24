@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Termix • macOS Multi-Terminal Dashboard</title>
+  <meta name="description" content="Dashboard centralizado para gerenciamento simultâneo de múltiplos terminais no macOS com Node.js, WebSockets e xterm.js">
+  
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- xterm.js CSS (Servido localmente pelo backend com fallback CDN) -->
+  <link rel="stylesheet" href="/vendor/@xterm/xterm/css/xterm.css" id="xterm-css-local">
+  <script>
+    // Fallback de contingência caso o link local não carregue
+    document.getElementById('xterm-css-local').onerror = function() {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css';
+      document.head.appendChild(link);
+    };
+  </script>
+
+  <!-- Estilos Customizados do Termix -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app-root">
+    <!-- Topbar / Navbar Principal -->
+    <header id="top-navbar">
+      <div class="navbar-left">
+        <div class="brand">
+          <div class="brand-logo-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="4 17 10 11 4 5"></polyline>
+              <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+          </div>
+          <span class="brand-title">Termix</span>
+          <span class="brand-badge">macOS PTY</span>
+        </div>
+
+        <div class="system-status-chip" id="system-status-chip">
+          <span class="status-indicator"></span>
+          <span id="system-info-text">Conectando...</span>
+        </div>
+      </div>
+
+      <!-- Ações Centrais e Controles de Layout -->
+      <div class="navbar-center">
+        <div class="layout-selector-group">
+          <span class="control-label">Layout:</span>
+          <button class="btn-layout active" data-layout="auto" title="Layout em Mosaico Automático">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+            Auto
+          </button>
+          <button class="btn-layout" data-layout="1col" title="1 Coluna (Foco)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+            </svg>
+            1 Col
+          </button>
+          <button class="btn-layout" data-layout="2col" title="2 Colunas Lado a Lado">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="8" height="16" rx="1"></rect>
+              <rect x="13" y="4" width="8" height="16" rx="1"></rect>
+            </svg>
+            2 Col
+          </button>
+          <button class="btn-layout" data-layout="3col" title="3 Colunas">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="4" width="5" height="16" rx="1"></rect>
+              <rect x="9.5" y="4" width="5" height="16" rx="1"></rect>
+              <rect x="17" y="4" width="5" height="16" rx="1"></rect>
+            </svg>
+            3 Col
+          </button>
+        </div>
+      </div>
+
+      <!-- Ações Direitas -->
+      <div class="navbar-right">
+        <!-- Botão de Transmissão / Broadcast -->
+        <button id="btn-toggle-broadcast" class="btn-action btn-secondary" title="Transmitir mesmo comando para todos os terminais">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"></path>
+            <path d="M7.8 16.2c-2.3-2.3-2.3-6.2 0-8.5"></path>
+            <circle cx="12" cy="12" r="2"></circle>
+            <path d="M16.2 7.8c2.3 2.3 2.3 6.2 0 8.5"></path>
+            <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"></path>
+          </svg>
+          Broadcast
+        </button>
+
+        <!-- Botão Novo Terminal -->
+        <button id="btn-new-terminal" class="btn-action btn-primary" title="Abrir novo terminal (Atalho: Ctrl+Shift+T ou Alt+T)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>Novo Terminal</span>
+        </button>
+
+        <!-- Botão Alternar Tema (Claro / Escuro) -->
+        <button id="btn-theme-toggle" class="btn-icon" title="Alternar Tema Claro / Escuro (Alt + J)">
+          <svg id="icon-theme-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg id="icon-theme-moon" class="hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+
+        <!-- Botão de Ajuda / Atalhos -->
+        <button id="btn-help" class="btn-icon" title="Atalhos de teclado e ajuda">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Barra Flutuante de Broadcast (aparece ao clicar em Broadcast) -->
+    <div id="broadcast-bar" class="broadcast-bar hidden">
+      <div class="broadcast-inner">
+        <div class="broadcast-badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"></path>
+            <circle cx="12" cy="12" r="2"></circle>
+            <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"></path>
+          </svg>
+          TRANSMITIR PARA TODOS (<span id="broadcast-count">0</span>)
+        </div>
+        <input type="text" id="broadcast-input" placeholder="Digite o comando e pressione Enter (ex: ls -la, git status)..." autocomplete="off" spellcheck="false">
+        <button id="btn-send-broadcast" class="btn-broadcast-send">Enviar ↵</button>
+        <button id="btn-close-broadcast" class="btn-broadcast-close" title="Fechar broadcast">✕</button>
+      </div>
+    </div>
+
+    <!-- Área de Conteúdo Principal / Grid de Terminais -->
+    <main id="main-content">
+      <!-- Container do Grid Dinâmico -->
+      <div id="terminals-grid" class="terminals-grid" data-layout="auto">
+        <!-- Terminais serão injetados dinamicamente via JavaScript -->
+      </div>
+
+      <!-- Tela Inicial / Empty State (quando não há terminais abertos) -->
+      <div id="empty-state" class="empty-state">
+        <div class="empty-card">
+          <div class="empty-icon-wrap">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <polyline points="4 17 10 11 4 5"></polyline>
+              <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+          </div>
+          <h2>Nenhum terminal ativo</h2>
+          <p>Inicie instâncias independentes de shell integradas diretamente ao seu sistema operacional.</p>
+          
+          <div class="empty-quick-actions">
+            <button class="btn-quick-start" id="btn-start-single">
+              <span>+</span> Abrir 1 Terminal
+            </button>
+            <button class="btn-quick-start" id="btn-start-pair">
+              <span>⫾</span> Abrir 2 Terminais (Lado a Lado)
+            </button>
+            <button class="btn-quick-start" id="btn-start-quad">
+              <span>⧉</span> Abrir Grid 2x2 (4 Terminais)
+            </button>
+          </div>
+
+          <div class="empty-tips">
+            <span class="tip-pill"><kbd>Alt</kbd> + <kbd>T</kbd> Novo Terminal</span>
+            <span class="tip-pill"><kbd>Alt</kbd> + <kbd>B</kbd> Broadcast</span>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Barra de Rodapé / Informações Rápidas -->
+    <footer id="bottom-bar">
+      <div class="footer-left">
+        <span class="footer-item">Terminais ativos: <strong id="footer-term-count">0</strong></span>
+        <span class="footer-divider">•</span>
+        <span class="footer-item">WebSocket: <span id="ws-status" class="status-badge badge-connecting">Conectando</span></span>
+      </div>
+      <div class="footer-right">
+        <span class="footer-hint">Dica: Dê duplo-clique no título de qualquer terminal para renomeá-lo</span>
+      </div>
+    </footer>
+
+    <!-- Modal de Ajuda / Atalhos -->
+    <div id="help-modal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Atalhos e Informações do Termix</h3>
+          <button class="btn-modal-close" id="btn-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="shortcut-list">
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Novo Terminal</span>
+              <span class="shortcut-keys"><kbd>Alt</kbd> + <kbd>T</kbd> ou <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd></span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Alternar Barra de Broadcast</span>
+              <span class="shortcut-keys"><kbd>Alt</kbd> + <kbd>B</kbd></span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Maximizar / Restaurar Terminal Focado</span>
+              <span class="shortcut-keys"><kbd>Alt</kbd> + <kbd>M</kbd></span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Limpar Buffer do Terminal</span>
+              <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>L</kbd> ou Botão "Limpar"</span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Renomear Aba/Bloco</span>
+              <span class="shortcut-keys">Duplo clique no cabeçalho</span>
+            </div>
+          </div>
+          <div class="modal-tech-info">
+            <p><strong>Stack Tecnológica:</strong> macOS zsh / bash • Node.js • node-pty • WebSockets (ws) • xterm.js com FitAddon & WebLinks.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts xterm.js (Local com fallback CDN automático) -->
+  <script src="/vendor/@xterm/xterm/lib/xterm.js"></script>
+  <script src="/vendor/@xterm/addon-fit/lib/addon-fit.js"></script>
+  <script src="/vendor/@xterm/addon-web-links/lib/addon-web-links.js"></script>
+  
+  <script>
+    // Se por qualquer razão os scripts locais falharem, carrega via CDN instantaneamente
+    if (typeof Terminal === 'undefined') {
+      console.warn('[Termix] Carregando xterm.js via fallback CDN...');
+      document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"><\/script>');
+      document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"><\/script>');
+      document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"><\/script>');
+    }
+  </script>
+
+  <!-- Lógica Principal da Aplicação SPA -->
+  <script src="app.js"></script>
+</body>
+</html>

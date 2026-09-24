@@ -1,0 +1,91 @@
+{
+  "name": "termix",
+  "productName": "Termix",
+  "version": "1.0.0",
+  "description": "Multi-Terminal Dashboard Desktop App para macOS com Electron, node-pty e xterm.js",
+  "main": "main.js",
+  "scripts": {
+    "postinstall": "electron-rebuild -f -w node-pty && node fix-permissions.js",
+    "start": "electron .",
+    "dev": "electron .",
+    "rebuild": "electron-rebuild -f -w node-pty && node fix-permissions.js",
+    "dist": "electron-builder --mac",
+    "dist:arm": "electron-builder --mac --arm64",
+    "dist:intel": "electron-builder --mac --x64",
+    "dist:universal": "electron-builder --mac --universal",
+    "web": "PORT=3333 node server.js"
+  },
+  "keywords": [
+    "terminal",
+    "dashboard",
+    "electron",
+    "pty",
+    "xterm",
+    "macos",
+    "devops"
+  ],
+  "author": "Termix Dev Team",
+  "license": "MIT",
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "express": "^4.21.2",
+    "node-pty": "^1.1.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.2",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.7.0"
+  },
+  "build": {
+    "appId": "com.factorivm.termix",
+    "productName": "Termix",
+    "copyright": "Copyright © 2026 Termix Dev Team",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "fix-permissions.js",
+      "public/**/*",
+      "node_modules/**/*",
+      "!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!node_modules/*.d.ts",
+      "!node_modules/.bin"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/node-pty/**/*"
+    ],
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "identity": null
+    },
+    "dmg": {
+      "title": "Termix Installer",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  }
+}
