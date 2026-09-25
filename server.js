@@ -15,6 +15,50 @@ const { WebSocketServer } = require('ws');
 const pty = require('node-pty');
 const DatabaseManager = require('./services/db');
 
+// Garante que o ambiente macOS carregue o PATH completo do usuário (Homebrew, Cargo, Local, etc.)
+function fixUserPath() {
+  const defaultPaths = [
+    '/opt/homebrew/bin',
+    '/opt/homebrew/sbin',
+    '/usr/local/bin',
+    '/usr/local/sbin',
+    path.join(os.homedir(), '.local', 'bin'),
+    path.join(os.homedir(), '.cargo', 'bin'),
+    path.join(os.homedir(), 'bin'),
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin'
+  ];
+
+  try {
+    const loginShell = process.env.SHELL || '/bin/zsh';
+    const userPath = require('child_process')
+      .execFileSync(loginShell, ['-ilc', 'echo -n "$PATH"'], {
+        encoding: 'utf8',
+        timeout: 3000,
+        env: { ...process.env, HOME: os.homedir() }
+      })
+      .trim();
+
+    if (userPath) {
+      const merged = Array.from(new Set([...userPath.split(':'), ...defaultPaths, ...(process.env.PATH || '').split(':')]))
+        .filter(Boolean)
+        .join(':');
+      process.env.PATH = merged;
+      return;
+    }
+  } catch (_) {}
+
+  const current = (process.env.PATH || '').split(':');
+  const merged = Array.from(new Set([...defaultPaths, ...current]))
+    .filter(Boolean)
+    .join(':');
+  process.env.PATH = merged;
+}
+
+fixUserPath();
+
 const PORT = process.env.PORT || 3333;
 const HOST = process.env.HOST || '127.0.0.1';
 
@@ -160,7 +204,11 @@ function createTerminalSession(ws, options = {}) {
       LC_ALL: process.env.LC_ALL || 'en_US.UTF-8'
     };
 
-    const ptyProcess = pty.spawn(shell, args, {
+    const shellArgs = (args && args.length > 0)
+      ? args
+      : (shell === DEFAULT_SHELL || shell.endsWith('/zsh') || shell.endsWith('/bash') || shell.endsWith('/sh') ? ['-l'] : []);
+
+    const ptyProcess = pty.spawn(shell, shellArgs, {
       name: 'xterm-256color',
       cols: Math.max(10, parseInt(cols, 10) || 80),
       rows: Math.max(5, parseInt(rows, 10) || 24),
@@ -290,16 +338,38 @@ function connectHostSession(ws, hostId, options = {}) {
 
   if (resolvedKeyPath) {
     sshArgs.push('-i', resolvedKeyPath);
+    // Evita testar outras chaves do ssh-agent que causariam 'Too many authentication failures'
+    sshArgs.push('-o', 'IdentitiesOnly=yes');
   }
+
+  // Parâmetros de estabilidade e persistência de conexão SSH (Keep-Alive):
+  // - ServerAliveInterval=15 e ServerAliveCountMax=3: envia pacotes de pulso (heartbeat) a cada 15 segundos,
+  //   mantendo a conexão aberta e impedindo que firewalls, NATs, roteadores e VCNs (Oracle Cloud / AWS)
+  //   encerrem a conexão silenciosamente por inatividade.
+  // - TCPKeepAlive=yes: mantém keepalive na camada de transporte TCP.
+  // - StrictHostKeyChecking=accept-new: aceita chaves novas sem abortar o terminal.
+  // - ConnectTimeout=15: evita travamentos longos caso o host esteja inacessível.
+  sshArgs.push(
+    '-o', 'ServerAliveInterval=15',
+    '-o', 'ServerAliveCountMax=3',
+    '-o', 'TCPKeepAlive=yes',
+    '-o', 'ConnectTimeout=15',
+    '-o', 'StrictHostKeyChecking=accept-new'
+  );
 
   const userPrefix = identity && identity.username ? `${identity.username}@` : '';
   const target = `${userPrefix}${host.hostname}`;
 
+  // Força alocação de pseudoterminal no servidor remoto (-t) para suporte interativo total
+  sshArgs.push('-t');
+
+  // Se houver default_path ou startup_command remoto
   if (host.default_path || host.startup_command) {
-    const cdPart = host.default_path ? `cd "${host.default_path}" && ` : '';
+    const cdPart = host.default_path ? `if [ -d "${host.default_path}" ]; then cd "${host.default_path}"; fi; ` : '';
     const cmdPart = host.startup_command ? `${host.startup_command}; ` : '';
-    const remoteCommand = `${cdPart}${cmdPart}exec $SHELL -l`;
-    sshArgs.push('-t', target, remoteCommand);
+    // Executa shell interativo com fallback resiliente para evitar desconexão se $SHELL não estiver exportado
+    const remoteCommand = `${cdPart}${cmdPart}exec "\${SHELL:-/bin/bash}" -l 2>/dev/null || exec /bin/sh -i`;
+    sshArgs.push(target, remoteCommand);
   } else {
     sshArgs.push(target);
   }
