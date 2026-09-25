@@ -273,7 +273,7 @@
               <div class="about-title-block">
                 <div class="about-title-row">
                   <span class="about-app-name">Termix</span>
-                  <span class="about-version-badge">v1.2.0</span>
+                  <span class="about-version-badge">v1.3.0</span>
                 </div>
                 <p class="about-app-desc">Multi-Terminal Dashboard Desktop App para macOS</p>
               </div>
@@ -539,7 +539,8 @@
               <label for="identity-input-auth-type">Método de Autenticação *</label>
               <select id="identity-input-auth-type">
                 <option value="password">Senha</option>
-                <option value="key">Chave Privada SSH</option>
+                <option value="key">Chave Privada SSH (Caminho do Arquivo)</option>
+                <option value="certificate">Certificado / Chave Privada (Colar Conteúdo - OCI, AWS)</option>
                 <option value="agent">Agente SSH / Sem Segredo</option>
               </select>
             </div>
@@ -559,6 +560,18 @@
             <div class="form-group">
               <label for="identity-input-passphrase">Passphrase da Chave (Opcional)</label>
               <input type="password" id="identity-input-passphrase" placeholder="Passphrase da chave privada (se houver)">
+            </div>
+          </div>
+
+          <div id="identity-cert-fields" class="form-group hidden">
+            <div class="form-group">
+              <label for="identity-input-certificate">Conteúdo do Certificado / Chave Privada (PEM / OpenSSH) *</label>
+              <textarea id="identity-input-certificate" class="code-textarea" rows="6" placeholder="Cole aqui o conteúdo do certificado ou chave privada (ex: OCI, AWS, GCP)...&#10;-----BEGIN RSA PRIVATE KEY-----&#10;...&#10;-----END RSA PRIVATE KEY-----"></textarea>
+              <span class="field-hint">🔒 Armazenado com criptografia forte AES-256 no banco SQLite local. Ideal para chaves do OCI (Oracle Cloud), AWS, etc.</span>
+            </div>
+            <div class="form-group">
+              <label for="identity-input-cert-passphrase">Passphrase do Certificado / Chave (Opcional)</label>
+              <input type="password" id="identity-input-cert-passphrase" placeholder="Passphrase da chave / certificado (se houver)">
             </div>
           </div>
 

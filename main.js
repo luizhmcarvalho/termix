@@ -92,8 +92,8 @@ function setupMenu() {
   if (isMac) {
     app.setAboutPanelOptions({
       applicationName: 'Termix',
-      applicationVersion: '1.1.0',
-      version: '1.1.0',
+      applicationVersion: '1.3.0',
+      version: '1.3.0',
       copyright: 'Copyright © 2026 Luiz Carvalho',
       authors: ['Luiz Carvalho'],
       credits: 'Desenvolvido por Luiz Carvalho\nLicença: MIT'
@@ -370,14 +370,23 @@ function connectHostSession(hostId, options = {}) {
     sshArgs.push('-p', String(host.port));
   }
 
-  if (identity && identity.key_path) {
-    let keyPath = identity.key_path.trim();
-    if (keyPath.startsWith('~')) {
-      keyPath = path.join(os.homedir(), keyPath.slice(1));
+  let resolvedKeyPath = null;
+  if (identity) {
+    if (identity.auth_type === 'certificate' || identity.certificate) {
+      resolvedKeyPath = db.ensureCertificateFile(identity);
+    } else if (identity.key_path) {
+      let keyPath = identity.key_path.trim();
+      if (keyPath.startsWith('~')) {
+        keyPath = path.join(os.homedir(), keyPath.slice(1));
+      }
+      if (fs.existsSync(keyPath)) {
+        resolvedKeyPath = keyPath;
+      }
     }
-    if (fs.existsSync(keyPath)) {
-      sshArgs.push('-i', keyPath);
-    }
+  }
+
+  if (resolvedKeyPath) {
+    sshArgs.push('-i', resolvedKeyPath);
   }
 
   const userPrefix = identity && identity.username ? `${identity.username}@` : '';
@@ -528,7 +537,7 @@ ipcMain.handle('db:identities:list', () => {
 });
 
 ipcMain.handle('db:identities:get', (event, id) => {
-  return getDatabase().getIdentity(id);
+  return getDatabase().getIdentity(id, true);
 });
 
 ipcMain.handle('db:identities:save', (event, data) => {

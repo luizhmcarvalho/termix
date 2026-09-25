@@ -84,6 +84,12 @@ app.get('/api/identities', (req, res) => {
   res.json(db.getIdentities());
 });
 
+app.get('/api/identities/:id', (req, res) => {
+  const item = db.getIdentity(req.params.id, true);
+  if (!item) return res.status(404).json({ error: 'Identidade não encontrada' });
+  res.json(item);
+});
+
 app.post('/api/identities', (req, res) => {
   try {
     const saved = db.saveIdentity(req.body);
@@ -267,14 +273,23 @@ function connectHostSession(ws, hostId, options = {}) {
     sshArgs.push('-p', String(host.port));
   }
 
-  if (identity && identity.key_path) {
-    let keyPath = identity.key_path.trim();
-    if (keyPath.startsWith('~')) {
-      keyPath = path.join(os.homedir(), keyPath.slice(1));
+  let resolvedKeyPath = null;
+  if (identity) {
+    if (identity.auth_type === 'certificate' || identity.certificate) {
+      resolvedKeyPath = db.ensureCertificateFile(identity);
+    } else if (identity.key_path) {
+      let keyPath = identity.key_path.trim();
+      if (keyPath.startsWith('~')) {
+        keyPath = path.join(os.homedir(), keyPath.slice(1));
+      }
+      if (fs.existsSync(keyPath)) {
+        resolvedKeyPath = keyPath;
+      }
     }
-    if (fs.existsSync(keyPath)) {
-      sshArgs.push('-i', keyPath);
-    }
+  }
+
+  if (resolvedKeyPath) {
+    sshArgs.push('-i', resolvedKeyPath);
   }
 
   const userPrefix = identity && identity.username ? `${identity.username}@` : '';

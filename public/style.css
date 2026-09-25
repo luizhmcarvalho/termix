@@ -1475,6 +1475,12 @@ kbd {
   border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
+.badge-cert {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.25);
+}
+
 .host-target-info {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.78rem;
@@ -1643,7 +1649,8 @@ kbd {
 }
 
 .form-group input,
-.form-group select {
+.form-group select,
+.form-group textarea {
   padding: 9px 12px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -1655,8 +1662,19 @@ kbd {
 }
 
 .form-group input:focus,
-.form-group select:focus {
+.form-group select:focus,
+.form-group textarea:focus {
   border-color: var(--primary);
+}
+
+.form-group textarea.code-textarea {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  resize: vertical;
+  min-height: 120px;
+  white-space: pre;
+  tab-size: 2;
 }
 
 .field-hint {

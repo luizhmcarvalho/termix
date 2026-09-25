@@ -779,8 +779,10 @@ class TermixDashboard {
       const type = e.target.value;
       const passGroup = document.getElementById('identity-password-field');
       const keyGroup = document.getElementById('identity-key-fields');
+      const certGroup = document.getElementById('identity-cert-fields');
       if (passGroup) passGroup.classList.toggle('hidden', type !== 'password');
       if (keyGroup) keyGroup.classList.toggle('hidden', type !== 'key');
+      if (certGroup) certGroup.classList.toggle('hidden', type !== 'certificate');
     });
 
     // Submit formulário de Identidade
@@ -793,7 +795,10 @@ class TermixDashboard {
         const auth_type = document.getElementById('identity-input-auth-type')?.value;
         const password = document.getElementById('identity-input-password')?.value;
         const key_path = document.getElementById('identity-input-key-path')?.value?.trim() || null;
-        const passphrase = document.getElementById('identity-input-passphrase')?.value;
+        const passphrase = auth_type === 'certificate'
+          ? document.getElementById('identity-input-cert-passphrase')?.value
+          : document.getElementById('identity-input-passphrase')?.value;
+        const certificate = document.getElementById('identity-input-certificate')?.value?.trim() || null;
 
         if (!name || !username) return;
 
@@ -804,7 +809,8 @@ class TermixDashboard {
           auth_type,
           password: password || undefined,
           key_path,
-          passphrase: passphrase || undefined
+          passphrase: passphrase || undefined,
+          certificate: certificate || undefined
         };
 
         await this.apiSaveIdentity(payload);
@@ -1028,7 +1034,8 @@ class TermixDashboard {
       const targetInfo = document.createElement('span');
       targetInfo.className = 'host-target-info';
       if (host.host_type === 'ssh') {
-        const userPrefix = host.identity && host.identity.username ? `${host.identity.username}@` : '';
+        const username = host.username || (host.identity && host.identity.username);
+        const userPrefix = username ? `${username}@` : '';
         targetInfo.textContent = `${userPrefix}${host.hostname || 'localhost'}:${host.port || 22}`;
       } else {
         targetInfo.textContent = 'Terminal Local (PTY)';
@@ -1177,19 +1184,42 @@ class TermixDashboard {
       header.appendChild(titleGroup);
 
       const authBadge = document.createElement('span');
-      authBadge.className = 'badge-pill badge-ssh';
+      authBadge.className = 'badge-pill';
       if (identity.auth_type === 'password') {
+        authBadge.classList.add('badge-ssh');
         authBadge.textContent = 'SENHA (AES-256)';
       } else if (identity.auth_type === 'key') {
+        authBadge.classList.add('badge-ssh');
         authBadge.textContent = 'CHAVE SSH';
+      } else if (identity.auth_type === 'certificate') {
+        authBadge.classList.add('badge-cert');
+        authBadge.textContent = 'CERTIFICADO / OCI';
       } else {
+        authBadge.classList.add('badge-ssh');
         authBadge.textContent = 'AGENTE SSH';
       }
       header.appendChild(authBadge);
 
       card.appendChild(header);
 
-      if (identity.key_path) {
+      if (identity.auth_type === 'certificate' || identity.has_certificate) {
+        const metaBox = document.createElement('div');
+        metaBox.className = 'host-config-meta';
+        const certLine = document.createElement('div');
+        certLine.className = 'meta-line';
+        certLine.innerHTML = `
+          <svg class="meta-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+          <span>Certificado / Chave em texto (criptografia AES-256)</span>
+        `;
+        metaBox.appendChild(certLine);
+        card.appendChild(metaBox);
+      } else if (identity.key_path) {
         const metaBox = document.createElement('div');
         metaBox.className = 'host-config-meta';
         const keyLine = document.createElement('div');
@@ -1264,7 +1294,11 @@ class TermixDashboard {
     this.savedIdentities.forEach(ident => {
       const opt = document.createElement('option');
       opt.value = ident.id;
-      opt.textContent = `${ident.name} (${ident.username})`;
+      let typeLabel = 'Senha';
+      if (ident.auth_type === 'key') typeLabel = 'Chave SSH';
+      else if (ident.auth_type === 'certificate') typeLabel = 'Certificado / OCI';
+      else if (ident.auth_type === 'agent') typeLabel = 'Agente SSH';
+      opt.textContent = `${ident.name} (${ident.username} • ${typeLabel})`;
       identitySelect.appendChild(opt);
     });
 
@@ -1333,8 +1367,11 @@ class TermixDashboard {
     const passInput = document.getElementById('identity-input-password');
     const keyPathInput = document.getElementById('identity-input-key-path');
     const passPhraseInput = document.getElementById('identity-input-passphrase');
+    const certInput = document.getElementById('identity-input-certificate');
+    const certPassPhraseInput = document.getElementById('identity-input-cert-passphrase');
     const passGroup = document.getElementById('identity-password-field');
     const keyGroup = document.getElementById('identity-key-fields');
+    const certGroup = document.getElementById('identity-cert-fields');
 
     if (identity) {
       if (titleEl) titleEl.textContent = 'Editar Identidade';
@@ -1351,6 +1388,25 @@ class TermixDashboard {
         passPhraseInput.value = '';
         passPhraseInput.placeholder = 'Deixe em branco para manter a passphrase';
       }
+      if (certPassPhraseInput) {
+        certPassPhraseInput.value = '';
+        certPassPhraseInput.placeholder = 'Deixe em branco para manter a passphrase';
+      }
+      if (certInput) {
+        certInput.value = '';
+        certInput.placeholder = identity.has_certificate
+          ? '🔒 Certificado / chave já configurado(a). Deixe em branco para manter ou cole novo conteúdo para substituir.'
+          : 'Cole o certificado ou chave privada aqui (ex: OCI, AWS)...';
+      }
+
+      // Se for certificado, carrega conteúdo descriptografado do servidor para visualização / edição
+      if (identity.id && (identity.auth_type === 'certificate' || identity.has_certificate)) {
+        this.apiGetIdentity(identity.id).then(full => {
+          if (full && full.certificate && certInput && idInput.value === identity.id) {
+            certInput.value = full.certificate;
+          }
+        }).catch(() => {});
+      }
     } else {
       if (titleEl) titleEl.textContent = 'Nova Identidade';
       if (idInput) idInput.value = '';
@@ -1366,11 +1422,20 @@ class TermixDashboard {
         passPhraseInput.value = '';
         passPhraseInput.placeholder = 'Passphrase da chave privada (se houver)';
       }
+      if (certPassPhraseInput) {
+        certPassPhraseInput.value = '';
+        certPassPhraseInput.placeholder = 'Passphrase do certificado (se houver)';
+      }
+      if (certInput) {
+        certInput.value = '';
+        certInput.placeholder = 'Cole aqui o conteúdo do certificado ou chave privada (ex: OCI, AWS, GCP)...\n-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----';
+      }
     }
 
     const currentType = authTypeSelect ? authTypeSelect.value : 'password';
     if (passGroup) passGroup.classList.toggle('hidden', currentType !== 'password');
     if (keyGroup) keyGroup.classList.toggle('hidden', currentType !== 'key');
+    if (certGroup) certGroup.classList.toggle('hidden', currentType !== 'certificate');
 
     this.identityFormModalEl?.classList.remove('hidden');
     nameInput?.focus();
