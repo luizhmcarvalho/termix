@@ -8,12 +8,24 @@ require('./fix-permissions');
 
 const path = require('path');
 const os = require('os');
+const fs = require('fs');
 const { app, BrowserWindow, ipcMain, Menu, clipboard } = require('electron');
 const pty = require('node-pty');
+const DatabaseManager = require('./services/db');
 
 // Configurações do shell no macOS
 const DEFAULT_SHELL = process.env.SHELL || '/bin/zsh';
 const DEFAULT_CWD = process.env.HOME || process.cwd();
+
+// Instância do banco de dados SQLite local
+let dbInstance = null;
+function getDatabase() {
+  if (!dbInstance) {
+    const storageDir = path.join(app.getPath('userData'));
+    dbInstance = new DatabaseManager(storageDir);
+  }
+  return dbInstance;
+}
 
 // Armazenamento das instâncias ativas: Map<terminalId, { id, ptyProcess, title, createdAt }>
 const terminals = new Map();
@@ -234,11 +246,21 @@ function createTerminalSession(options = {}) {
     cols = 80,
     rows = 24,
     shell = DEFAULT_SHELL,
+    args = [],
     cwd = DEFAULT_CWD,
-    title = 'Terminal'
+    title = 'Terminal',
+    startupCommand = null
   } = options;
 
   try {
+    let targetCwd = cwd;
+    if (typeof targetCwd === 'string' && targetCwd.startsWith('~')) {
+      targetCwd = path.join(os.homedir(), targetCwd.slice(1));
+    }
+    if (!targetCwd || !fs.existsSync(targetCwd)) {
+      targetCwd = DEFAULT_CWD;
+    }
+
     const env = {
       ...process.env,
       TERM: 'xterm-256color',
@@ -247,11 +269,11 @@ function createTerminalSession(options = {}) {
       LC_ALL: process.env.LC_ALL || 'en_US.UTF-8'
     };
 
-    const ptyProcess = pty.spawn(shell, [], {
+    const ptyProcess = pty.spawn(shell, args, {
       name: 'xterm-256color',
       cols: Math.max(10, parseInt(cols, 10) || 80),
       rows: Math.max(5, parseInt(rows, 10) || 24),
-      cwd,
+      cwd: targetCwd,
       env
     });
 
@@ -264,6 +286,18 @@ function createTerminalSession(options = {}) {
 
     terminals.set(id, session);
     console.log(`[Termix Electron] Terminal [${id}] iniciado - PID: ${ptyProcess.pid}`);
+
+    // Executa comando de inicialização configurado para o Host, se houver
+    if (startupCommand && typeof startupCommand === 'string' && startupCommand.trim()) {
+      setTimeout(() => {
+        try {
+          const cmd = startupCommand.trim();
+          ptyProcess.write(cmd.endsWith('\r') ? cmd : cmd + '\r');
+        } catch (e) {
+          console.warn('[Termix] Falha ao enviar comando de inicialização:', e.message);
+        }
+      }, 400);
+    }
 
     // Envia saída do terminal para a UI via IPC
     ptyProcess.onData((data) => {
@@ -302,6 +336,73 @@ function createTerminalSession(options = {}) {
     }
     return null;
   }
+}
+
+/**
+ * Conecta a um Host configurado (SSH ou Local) com diretório padrão e comando de inicialização
+ */
+function connectHostSession(hostId, options = {}) {
+  const db = getDatabase();
+  const host = db.getHost(hostId, true);
+  if (!host) {
+    throw new Error(`Host com ID ${hostId} não encontrado.`);
+  }
+
+  const { cols = 80, rows = 24 } = options;
+  const id = options.termId || options.terminalId || `term-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+  if (host.host_type === 'local') {
+    return createTerminalSession({
+      id,
+      cols,
+      rows,
+      title: host.name,
+      cwd: host.default_path || DEFAULT_CWD,
+      startupCommand: host.startup_command
+    });
+  }
+
+  // Conexão SSH
+  const identity = host.identity;
+  const sshArgs = [];
+
+  if (host.port && parseInt(host.port, 10) !== 22) {
+    sshArgs.push('-p', String(host.port));
+  }
+
+  if (identity && identity.key_path) {
+    let keyPath = identity.key_path.trim();
+    if (keyPath.startsWith('~')) {
+      keyPath = path.join(os.homedir(), keyPath.slice(1));
+    }
+    if (fs.existsSync(keyPath)) {
+      sshArgs.push('-i', keyPath);
+    }
+  }
+
+  const userPrefix = identity && identity.username ? `${identity.username}@` : '';
+  const target = `${userPrefix}${host.hostname}`;
+
+  // Se houver default_path ou startup_command remoto
+  if (host.default_path || host.startup_command) {
+    const cdPart = host.default_path ? `cd "${host.default_path}" && ` : '';
+    const cmdPart = host.startup_command ? `${host.startup_command}; ` : '';
+    // Aloca pseudoterminal (-t) e mantém o shell interativo do servidor
+    const remoteCommand = `${cdPart}${cmdPart}exec $SHELL -l`;
+    sshArgs.push('-t', target, remoteCommand);
+  } else {
+    sshArgs.push(target);
+  }
+
+  return createTerminalSession({
+    id,
+    cols,
+    rows,
+    shell: '/usr/bin/ssh',
+    args: sshArgs,
+    title: `${host.name} (SSH)`,
+    cwd: DEFAULT_CWD
+  });
 }
 
 /**
@@ -391,6 +492,51 @@ ipcMain.on('clipboard:write', (event, text) => {
   if (typeof text === 'string') {
     clipboard.writeText(text);
   }
+});
+
+// IPC: Gerenciador de Hosts (SQLite)
+ipcMain.handle('db:hosts:list', () => {
+  return getDatabase().getHosts();
+});
+
+ipcMain.handle('db:hosts:get', (event, id) => {
+  return getDatabase().getHost(id);
+});
+
+ipcMain.handle('db:hosts:save', (event, data) => {
+  return getDatabase().saveHost(data);
+});
+
+ipcMain.handle('db:hosts:delete', (event, id) => {
+  return getDatabase().deleteHost(id);
+});
+
+ipcMain.handle('db:hosts:connect', (event, options = {}) => {
+  try {
+    const hostId = options.id || options.hostId;
+    connectHostSession(hostId, options);
+    return { success: true };
+  } catch (err) {
+    console.error('[Termix Electron] Erro ao conectar host:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+// IPC: Gerenciador de Identidades (SQLite com Criptografia)
+ipcMain.handle('db:identities:list', () => {
+  return getDatabase().getIdentities();
+});
+
+ipcMain.handle('db:identities:get', (event, id) => {
+  return getDatabase().getIdentity(id);
+});
+
+ipcMain.handle('db:identities:save', (event, data) => {
+  return getDatabase().saveIdentity(data);
+});
+
+ipcMain.handle('db:identities:delete', (event, id) => {
+  return getDatabase().deleteIdentity(id);
 });
 
 // Ciclo de vida do Electron

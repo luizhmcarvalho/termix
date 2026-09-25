@@ -72,6 +72,16 @@ class TermixDashboard {
     this.broadcastCountEl = document.getElementById('broadcast-count');
     this.helpModalEl = document.getElementById('help-modal');
 
+    // Modais e Estado de Hosts & Identidades (Estilo Termius)
+    this.hostsModalEl = document.getElementById('hosts-modal');
+    this.hostFormModalEl = document.getElementById('host-form-modal');
+    this.identityFormModalEl = document.getElementById('identity-form-modal');
+    this.savedHosts = [];
+    this.savedIdentities = [];
+    this.hostsFilterType = 'all';
+    this.hostsSearchQuery = '';
+    this.activeHostsTab = 'hosts';
+
     // Inicializa o tema visual
     this.applyTheme(this.currentTheme);
 
@@ -83,6 +93,7 @@ class TermixDashboard {
     }
 
     this.initGlobalEvents();
+    this.initHostsManager();
   }
 
   /**
@@ -101,8 +112,14 @@ class TermixDashboard {
 
     // Registra listeners de saída do terminal
     window.termix.onCreated((msg) => {
-      const instance = this.terminals.get(msg.id);
-      if (instance) instance.handleCreated(msg);
+      let instance = this.terminals.get(msg.id);
+      if (!instance) {
+        instance = new TerminalInstance(this, msg.id, msg.title || 'Terminal');
+        this.terminals.set(msg.id, instance);
+        this.updateGridState();
+        this.setActiveTerminal(msg.id);
+      }
+      instance.handleCreated(msg);
     });
 
     window.termix.onOutput((msg) => {
@@ -249,8 +266,14 @@ class TermixDashboard {
         break;
       case 'created':
         {
-          const instance = this.terminals.get(id);
-          if (instance) instance.handleCreated(msg);
+          let instance = this.terminals.get(id);
+          if (!instance) {
+            instance = new TerminalInstance(this, id, msg.title || 'Terminal');
+            this.terminals.set(id, instance);
+            this.updateGridState();
+            this.setActiveTerminal(id);
+          }
+          instance.handleCreated(msg);
         }
         break;
       case 'output':
@@ -545,9 +568,18 @@ class TermixDashboard {
         this.toggleTheme();
       }
 
+      // Alt + H ou Cmd + Shift + H: Gerenciador de Hosts
+      if ((e.altKey && e.code === 'KeyH') || (e.metaKey && e.shiftKey && e.code === 'KeyH')) {
+        e.preventDefault();
+        this.openHostsModal();
+      }
+
       if (e.key === 'Escape') {
-        this.helpModalEl.classList.add('hidden');
-        this.broadcastBarEl.classList.add('hidden');
+        this.helpModalEl?.classList.add('hidden');
+        this.broadcastBarEl?.classList.add('hidden');
+        this.hostFormModalEl?.classList.add('hidden');
+        this.identityFormModalEl?.classList.add('hidden');
+        this.hostsModalEl?.classList.add('hidden');
       }
     });
 
@@ -557,6 +589,756 @@ class TermixDashboard {
       clearTimeout(resizeDebounce);
       resizeDebounce = setTimeout(() => this.fitAll(), 100);
     });
+  }
+
+  /**
+   * Inicializa eventos e integração do Gerenciador de Hosts & Identidades
+   */
+  initHostsManager() {
+    // Botões para abrir modal de hosts
+    document.getElementById('btn-open-hosts')?.addEventListener('click', () => this.openHostsModal('hosts'));
+    document.getElementById('btn-start-host')?.addEventListener('click', () => this.openHostsModal('hosts'));
+
+    // Botão fechar modal de hosts
+    document.getElementById('btn-close-hosts-modal')?.addEventListener('click', () => this.closeHostsModal());
+    this.hostsModalEl?.addEventListener('click', (e) => {
+      if (e.target === this.hostsModalEl) this.closeHostsModal();
+    });
+
+    // Abas do modal (Hosts / Identidades)
+    document.querySelectorAll('.hosts-tab-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const tab = e.currentTarget.getAttribute('data-tab');
+        this.switchHostsTab(tab);
+      });
+    });
+
+    // Busca e Filtros de Hosts
+    document.getElementById('hosts-search-input')?.addEventListener('input', (e) => {
+      this.hostsSearchQuery = e.target.value;
+      this.renderHostsList();
+    });
+
+    document.getElementById('hosts-filter-type')?.addEventListener('change', (e) => {
+      this.hostsFilterType = e.target.value;
+      this.renderHostsList();
+    });
+
+    // Formulário de Host: Abertura e Fechamento
+    document.getElementById('btn-add-host')?.addEventListener('click', () => this.openHostForm());
+    document.getElementById('btn-close-host-form')?.addEventListener('click', () => this.closeHostForm());
+    document.getElementById('btn-cancel-host-form')?.addEventListener('click', () => this.closeHostForm());
+    this.hostFormModalEl?.addEventListener('click', (e) => {
+      if (e.target === this.hostFormModalEl) this.closeHostForm();
+    });
+
+    // Alternar campos SSH / Local no formulário de host
+    document.getElementById('host-input-type')?.addEventListener('change', (e) => {
+      const sshFields = document.getElementById('host-ssh-fields');
+      if (sshFields) {
+        sshFields.style.display = e.target.value === 'local' ? 'none' : 'block';
+      }
+    });
+
+    // Link rápido para criar identidade no formulário de host
+    document.getElementById('link-create-identity-quick')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.openIdentityForm();
+    });
+
+    // Submit formulário de Host
+    document.getElementById('form-host')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        const id = document.getElementById('host-input-id')?.value || undefined;
+        const name = document.getElementById('host-input-name')?.value?.trim();
+        const host_type = document.getElementById('host-input-type')?.value;
+        const color = document.getElementById('host-input-color')?.value;
+        const hostname = document.getElementById('host-input-hostname')?.value?.trim();
+        const port = parseInt(document.getElementById('host-input-port')?.value, 10) || 22;
+        const identity_id = document.getElementById('host-input-identity')?.value || null;
+        const default_path = document.getElementById('host-input-path')?.value?.trim() || null;
+        const startup_command = document.getElementById('host-input-command')?.value?.trim() || null;
+        const tagsStr = document.getElementById('host-input-tags')?.value || '';
+        const tags = tagsStr.split(',').map(s => s.trim()).filter(Boolean);
+
+        if (!name) return;
+
+        const payload = {
+          id,
+          name,
+          host_type,
+          color,
+          hostname,
+          port,
+          identity_id,
+          default_path,
+          startup_command,
+          tags
+        };
+
+        await this.apiSaveHost(payload);
+        this.closeHostForm();
+        await this.refreshHostsAndIdentities();
+      } catch (err) {
+        alert('Erro ao salvar host: ' + err.message);
+      }
+    });
+
+    // Formulário de Identidade: Abertura e Fechamento
+    document.getElementById('btn-add-identity')?.addEventListener('click', () => this.openIdentityForm());
+    document.getElementById('btn-close-identity-form')?.addEventListener('click', () => this.closeIdentityForm());
+    document.getElementById('btn-cancel-identity-form')?.addEventListener('click', () => this.closeIdentityForm());
+    this.identityFormModalEl?.addEventListener('click', (e) => {
+      if (e.target === this.identityFormModalEl) this.closeIdentityForm();
+    });
+
+    // Alternar campos no formulário de identidade conforme o tipo de auth
+    document.getElementById('identity-input-auth-type')?.addEventListener('change', (e) => {
+      const type = e.target.value;
+      const passGroup = document.getElementById('identity-password-field');
+      const keyGroup = document.getElementById('identity-key-fields');
+      if (passGroup) passGroup.classList.toggle('hidden', type !== 'password');
+      if (keyGroup) keyGroup.classList.toggle('hidden', type !== 'key');
+    });
+
+    // Submit formulário de Identidade
+    document.getElementById('form-identity')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        const id = document.getElementById('identity-input-id')?.value || undefined;
+        const name = document.getElementById('identity-input-name')?.value?.trim();
+        const username = document.getElementById('identity-input-username')?.value?.trim();
+        const auth_type = document.getElementById('identity-input-auth-type')?.value;
+        const password = document.getElementById('identity-input-password')?.value;
+        const key_path = document.getElementById('identity-input-key-path')?.value?.trim() || null;
+        const passphrase = document.getElementById('identity-input-passphrase')?.value;
+
+        if (!name || !username) return;
+
+        const payload = {
+          id,
+          name,
+          username,
+          auth_type,
+          password: password || undefined,
+          key_path,
+          passphrase: passphrase || undefined
+        };
+
+        await this.apiSaveIdentity(payload);
+        this.closeIdentityForm();
+        await this.refreshHostsAndIdentities();
+
+        // Se o modal de host estiver aberto, atualiza o seletor de identidades
+        this.populateIdentitySelect();
+      } catch (err) {
+        alert('Erro ao salvar identidade: ' + err.message);
+      }
+    });
+  }
+
+  // --- Helpers de API (Eletron Nativo com fallback REST Web) ---
+  async apiGetHosts() {
+    try {
+      if (this.isElectron && window.termix?.hosts) {
+        return await window.termix.hosts.list();
+      }
+      const res = await fetch('/api/hosts');
+      return await res.json();
+    } catch (err) {
+      console.error('[Termix] Falha ao listar hosts:', err);
+      return [];
+    }
+  }
+
+  async apiGetHost(id) {
+    try {
+      if (this.isElectron && window.termix?.hosts) {
+        return await window.termix.hosts.get(id);
+      }
+      const res = await fetch(`/api/hosts/${id}`);
+      return await res.json();
+    } catch (err) {
+      console.error('[Termix] Falha ao obter host:', err);
+      return null;
+    }
+  }
+
+  async apiSaveHost(data) {
+    if (this.isElectron && window.termix?.hosts) {
+      return await window.termix.hosts.save(data);
+    }
+    const res = await fetch('/api/hosts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return await res.json();
+  }
+
+  async apiDeleteHost(id) {
+    if (this.isElectron && window.termix?.hosts) {
+      return await window.termix.hosts.delete(id);
+    }
+    const res = await fetch(`/api/hosts/${id}`, { method: 'DELETE' });
+    return await res.json();
+  }
+
+  async apiGetIdentities() {
+    try {
+      if (this.isElectron && window.termix?.identities) {
+        return await window.termix.identities.list();
+      }
+      const res = await fetch('/api/identities');
+      return await res.json();
+    } catch (err) {
+      console.error('[Termix] Falha ao listar identidades:', err);
+      return [];
+    }
+  }
+
+  async apiGetIdentity(id) {
+    try {
+      if (this.isElectron && window.termix?.identities) {
+        return await window.termix.identities.get(id);
+      }
+      const res = await fetch(`/api/identities/${id}`);
+      return await res.json();
+    } catch (err) {
+      console.error('[Termix] Falha ao obter identidade:', err);
+      return null;
+    }
+  }
+
+  async apiSaveIdentity(data) {
+    if (this.isElectron && window.termix?.identities) {
+      return await window.termix.identities.save(data);
+    }
+    const res = await fetch('/api/identities', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return await res.json();
+  }
+
+  async apiDeleteIdentity(id) {
+    if (this.isElectron && window.termix?.identities) {
+      return await window.termix.identities.delete(id);
+    }
+    const res = await fetch(`/api/identities/${id}`, { method: 'DELETE' });
+    return await res.json();
+  }
+
+  // --- Controle de UI do Gerenciador de Hosts ---
+  async openHostsModal(tab = 'hosts') {
+    this.switchHostsTab(tab);
+    await this.refreshHostsAndIdentities();
+    this.hostsModalEl?.classList.remove('hidden');
+    document.getElementById('hosts-search-input')?.focus();
+  }
+
+  closeHostsModal() {
+    this.hostsModalEl?.classList.add('hidden');
+  }
+
+  switchHostsTab(tab) {
+    this.activeHostsTab = tab;
+    document.querySelectorAll('.hosts-tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+    });
+
+    const hostsPane = document.getElementById('tab-content-hosts');
+    const identitiesPane = document.getElementById('tab-content-identities');
+    if (tab === 'hosts') {
+      hostsPane?.classList.add('active');
+      identitiesPane?.classList.remove('active');
+    } else {
+      hostsPane?.classList.remove('active');
+      identitiesPane?.classList.add('active');
+    }
+  }
+
+  async refreshHostsAndIdentities() {
+    const [hosts, identities] = await Promise.all([
+      this.apiGetHosts(),
+      this.apiGetIdentities()
+    ]);
+
+    this.savedHosts = hosts || [];
+    this.savedIdentities = identities || [];
+
+    const hostsBadge = document.getElementById('hosts-count-badge');
+    if (hostsBadge) hostsBadge.textContent = this.savedHosts.length.toString();
+
+    const identitiesBadge = document.getElementById('identities-count-badge');
+    if (identitiesBadge) identitiesBadge.textContent = this.savedIdentities.length.toString();
+
+    this.renderHostsList();
+    this.renderIdentitiesList();
+  }
+
+  renderHostsList() {
+    const container = document.getElementById('hosts-list');
+    const emptyEl = document.getElementById('hosts-empty');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    const query = (this.hostsSearchQuery || '').toLowerCase().trim();
+    const typeFilter = this.hostsFilterType || 'all';
+
+    const filtered = this.savedHosts.filter(h => {
+      if (typeFilter !== 'all' && h.host_type !== typeFilter) return false;
+      if (!query) return true;
+
+      const nameMatch = (h.name || '').toLowerCase().includes(query);
+      const hostMatch = (h.hostname || '').toLowerCase().includes(query);
+      const tagsMatch = Array.isArray(h.tags) && h.tags.some(t => t.toLowerCase().includes(query));
+      const pathMatch = (h.default_path || '').toLowerCase().includes(query);
+      const cmdMatch = (h.startup_command || '').toLowerCase().includes(query);
+      return nameMatch || hostMatch || tagsMatch || pathMatch || cmdMatch;
+    });
+
+    if (filtered.length === 0) {
+      if (emptyEl) emptyEl.classList.remove('hidden');
+      return;
+    } else {
+      if (emptyEl) emptyEl.classList.add('hidden');
+    }
+
+    filtered.forEach(host => {
+      const card = document.createElement('div');
+      card.className = 'host-card';
+
+      const colorStripe = document.createElement('div');
+      colorStripe.className = 'host-card-color-stripe';
+      colorStripe.style.backgroundColor = host.color || '#38bdf8';
+      card.appendChild(colorStripe);
+
+      const header = document.createElement('div');
+      header.className = 'host-card-header';
+
+      const titleGroup = document.createElement('div');
+      titleGroup.className = 'host-card-title-group';
+
+      const titleRow = document.createElement('div');
+      titleRow.style.display = 'flex';
+      titleRow.style.alignItems = 'center';
+      titleRow.style.gap = '8px';
+
+      const nameEl = document.createElement('span');
+      nameEl.className = 'host-name';
+      nameEl.textContent = host.name;
+      titleRow.appendChild(nameEl);
+
+      const badges = document.createElement('div');
+      badges.className = 'host-badges';
+
+      const typeBadge = document.createElement('span');
+      typeBadge.className = `badge-pill ${host.host_type === 'ssh' ? 'badge-ssh' : 'badge-local'}`;
+      typeBadge.textContent = host.host_type === 'ssh' ? 'SSH' : 'LOCAL';
+      badges.appendChild(typeBadge);
+      titleRow.appendChild(badges);
+
+      titleGroup.appendChild(titleRow);
+
+      const targetInfo = document.createElement('span');
+      targetInfo.className = 'host-target-info';
+      if (host.host_type === 'ssh') {
+        const userPrefix = host.identity && host.identity.username ? `${host.identity.username}@` : '';
+        targetInfo.textContent = `${userPrefix}${host.hostname || 'localhost'}:${host.port || 22}`;
+      } else {
+        targetInfo.textContent = 'Terminal Local (PTY)';
+      }
+      titleGroup.appendChild(targetInfo);
+
+      header.appendChild(titleGroup);
+      card.appendChild(header);
+
+      // Meta: Default Path e Startup Command
+      if (host.default_path || host.startup_command) {
+        const metaBox = document.createElement('div');
+        metaBox.className = 'host-config-meta';
+
+        if (host.default_path) {
+          const pathLine = document.createElement('div');
+          pathLine.className = 'meta-line';
+          pathLine.title = `Diretório Padrão: ${host.default_path}`;
+          pathLine.innerHTML = `
+            <svg class="meta-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span>${this.escapeHtml(host.default_path)}</span>
+          `;
+          metaBox.appendChild(pathLine);
+        }
+
+        if (host.startup_command) {
+          const cmdLine = document.createElement('div');
+          cmdLine.className = 'meta-line';
+          cmdLine.title = `Comando Inicial: ${host.startup_command}`;
+          cmdLine.innerHTML = `
+            <svg class="meta-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+            <span><code>${this.escapeHtml(host.startup_command)}</code></span>
+          `;
+          metaBox.appendChild(cmdLine);
+        }
+
+        card.appendChild(metaBox);
+      }
+
+      // Tags
+      if (Array.isArray(host.tags) && host.tags.length > 0) {
+        const tagsRow = document.createElement('div');
+        tagsRow.className = 'host-tags-row';
+        host.tags.forEach(tag => {
+          const tagPill = document.createElement('span');
+          tagPill.className = 'host-tag';
+          tagPill.textContent = tag;
+          tagsRow.appendChild(tagPill);
+        });
+        card.appendChild(tagsRow);
+      }
+
+      // Rodapé do card: Ações
+      const actions = document.createElement('div');
+      actions.className = 'host-card-actions';
+
+      const btnConnect = document.createElement('button');
+      btnConnect.className = 'btn-connect-host';
+      btnConnect.innerHTML = `
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="4 17 10 11 4 5"></polyline>
+          <line x1="12" y1="19" x2="20" y2="19"></line>
+        </svg>
+        <span>Conectar</span>
+      `;
+      btnConnect.addEventListener('click', () => this.connectToHost(host));
+      actions.appendChild(btnConnect);
+
+      const iconActions = document.createElement('div');
+      iconActions.className = 'card-action-icons';
+
+      const btnEdit = document.createElement('button');
+      btnEdit.className = 'btn-icon-action';
+      btnEdit.title = 'Editar Host';
+      btnEdit.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+      `;
+      btnEdit.addEventListener('click', () => this.openHostForm(host));
+      iconActions.appendChild(btnEdit);
+
+      const btnDelete = document.createElement('button');
+      btnDelete.className = 'btn-icon-action btn-icon-delete';
+      btnDelete.title = 'Excluir Host';
+      btnDelete.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      `;
+      btnDelete.addEventListener('click', async () => {
+        if (confirm(`Deseja realmente remover o host "${host.name}"?`)) {
+          await this.apiDeleteHost(host.id);
+          await this.refreshHostsAndIdentities();
+        }
+      });
+      iconActions.appendChild(btnDelete);
+
+      actions.appendChild(iconActions);
+      card.appendChild(actions);
+
+      container.appendChild(card);
+    });
+  }
+
+  renderIdentitiesList() {
+    const container = document.getElementById('identities-list');
+    const emptyEl = document.getElementById('identities-empty');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (this.savedIdentities.length === 0) {
+      if (emptyEl) emptyEl.classList.remove('hidden');
+      return;
+    } else {
+      if (emptyEl) emptyEl.classList.add('hidden');
+    }
+
+    this.savedIdentities.forEach(identity => {
+      const card = document.createElement('div');
+      card.className = 'identity-card';
+
+      const header = document.createElement('div');
+      header.className = 'identity-card-header';
+
+      const titleGroup = document.createElement('div');
+      titleGroup.className = 'host-card-title-group';
+
+      const nameEl = document.createElement('span');
+      nameEl.className = 'identity-name';
+      nameEl.textContent = identity.name;
+      titleGroup.appendChild(nameEl);
+
+      const userEl = document.createElement('span');
+      userEl.className = 'host-target-info';
+      userEl.textContent = `Usuário: ${identity.username}`;
+      titleGroup.appendChild(userEl);
+
+      header.appendChild(titleGroup);
+
+      const authBadge = document.createElement('span');
+      authBadge.className = 'badge-pill badge-ssh';
+      if (identity.auth_type === 'password') {
+        authBadge.textContent = 'SENHA (AES-256)';
+      } else if (identity.auth_type === 'key') {
+        authBadge.textContent = 'CHAVE SSH';
+      } else {
+        authBadge.textContent = 'AGENTE SSH';
+      }
+      header.appendChild(authBadge);
+
+      card.appendChild(header);
+
+      if (identity.key_path) {
+        const metaBox = document.createElement('div');
+        metaBox.className = 'host-config-meta';
+        const keyLine = document.createElement('div');
+        keyLine.className = 'meta-line';
+        keyLine.innerHTML = `
+          <svg class="meta-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 2l-2 2m-1.5 1.5L16 7l-2-2-1.5 1.5 2 2L13 10l-1.5-1.5-2 2L11 12l-1.5 1.5L8 12l-2 2"></path>
+            <circle cx="7.5" cy="15.5" r="5.5"></circle>
+          </svg>
+          <span>${this.escapeHtml(identity.key_path)}</span>
+        `;
+        metaBox.appendChild(keyLine);
+        card.appendChild(metaBox);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'identity-card-actions';
+
+      const encryptedIndicator = document.createElement('div');
+      encryptedIndicator.style.display = 'flex';
+      encryptedIndicator.style.alignItems = 'center';
+      encryptedIndicator.style.gap = '4px';
+      encryptedIndicator.style.fontSize = '0.74rem';
+      encryptedIndicator.style.color = '#10b981';
+      encryptedIndicator.innerHTML = `<span>🔒 Criptografada</span>`;
+      actions.appendChild(encryptedIndicator);
+
+      const iconActions = document.createElement('div');
+      iconActions.className = 'card-action-icons';
+
+      const btnEdit = document.createElement('button');
+      btnEdit.className = 'btn-icon-action';
+      btnEdit.title = 'Editar Identidade';
+      btnEdit.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+      `;
+      btnEdit.addEventListener('click', () => this.openIdentityForm(identity));
+      iconActions.appendChild(btnEdit);
+
+      const btnDelete = document.createElement('button');
+      btnDelete.className = 'btn-icon-action btn-icon-delete';
+      btnDelete.title = 'Excluir Identidade';
+      btnDelete.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      `;
+      btnDelete.addEventListener('click', async () => {
+        if (confirm(`Deseja realmente remover a identidade "${identity.name}"?`)) {
+          await this.apiDeleteIdentity(identity.id);
+          await this.refreshHostsAndIdentities();
+        }
+      });
+      iconActions.appendChild(btnDelete);
+
+      actions.appendChild(iconActions);
+      card.appendChild(actions);
+
+      container.appendChild(card);
+    });
+  }
+
+  populateIdentitySelect(selectedId = '') {
+    const identitySelect = document.getElementById('host-input-identity');
+    if (!identitySelect) return;
+
+    identitySelect.innerHTML = '<option value="">Sem identidade (solicitar senha na hora)</option>';
+    this.savedIdentities.forEach(ident => {
+      const opt = document.createElement('option');
+      opt.value = ident.id;
+      opt.textContent = `${ident.name} (${ident.username})`;
+      identitySelect.appendChild(opt);
+    });
+
+    if (selectedId) {
+      identitySelect.value = selectedId;
+    }
+  }
+
+  openHostForm(host = null) {
+    const titleEl = document.getElementById('host-form-title');
+    const idInput = document.getElementById('host-input-id');
+    const nameInput = document.getElementById('host-input-name');
+    const typeSelect = document.getElementById('host-input-type');
+    const colorSelect = document.getElementById('host-input-color');
+    const hostnameInput = document.getElementById('host-input-hostname');
+    const portInput = document.getElementById('host-input-port');
+    const pathInput = document.getElementById('host-input-path');
+    const cmdInput = document.getElementById('host-input-command');
+    const tagsInput = document.getElementById('host-input-tags');
+    const sshFields = document.getElementById('host-ssh-fields');
+
+    this.populateIdentitySelect(host ? host.identity_id : '');
+
+    if (host) {
+      if (titleEl) titleEl.textContent = 'Editar Host';
+      if (idInput) idInput.value = host.id || '';
+      if (nameInput) nameInput.value = host.name || '';
+      if (typeSelect) typeSelect.value = host.host_type || 'ssh';
+      if (colorSelect) colorSelect.value = host.color || '#38bdf8';
+      if (hostnameInput) hostnameInput.value = host.hostname || '';
+      if (portInput) portInput.value = host.port || 22;
+      if (pathInput) pathInput.value = host.default_path || '';
+      if (cmdInput) cmdInput.value = host.startup_command || '';
+      if (tagsInput) tagsInput.value = Array.isArray(host.tags) ? host.tags.join(', ') : (host.tags || '');
+    } else {
+      if (titleEl) titleEl.textContent = 'Novo Host';
+      if (idInput) idInput.value = '';
+      if (nameInput) nameInput.value = '';
+      if (typeSelect) typeSelect.value = 'ssh';
+      if (colorSelect) colorSelect.value = '#38bdf8';
+      if (hostnameInput) hostnameInput.value = '';
+      if (portInput) portInput.value = 22;
+      if (pathInput) pathInput.value = '';
+      if (cmdInput) cmdInput.value = '';
+      if (tagsInput) tagsInput.value = '';
+    }
+
+    if (sshFields) {
+      sshFields.style.display = typeSelect && typeSelect.value === 'local' ? 'none' : 'block';
+    }
+
+    this.hostFormModalEl?.classList.remove('hidden');
+    nameInput?.focus();
+  }
+
+  closeHostForm() {
+    this.hostFormModalEl?.classList.add('hidden');
+  }
+
+  openIdentityForm(identity = null) {
+    const titleEl = document.getElementById('identity-form-title');
+    const idInput = document.getElementById('identity-input-id');
+    const nameInput = document.getElementById('identity-input-name');
+    const userInput = document.getElementById('identity-input-username');
+    const authTypeSelect = document.getElementById('identity-input-auth-type');
+    const passInput = document.getElementById('identity-input-password');
+    const keyPathInput = document.getElementById('identity-input-key-path');
+    const passPhraseInput = document.getElementById('identity-input-passphrase');
+    const passGroup = document.getElementById('identity-password-field');
+    const keyGroup = document.getElementById('identity-key-fields');
+
+    if (identity) {
+      if (titleEl) titleEl.textContent = 'Editar Identidade';
+      if (idInput) idInput.value = identity.id || '';
+      if (nameInput) nameInput.value = identity.name || '';
+      if (userInput) userInput.value = identity.username || '';
+      if (authTypeSelect) authTypeSelect.value = identity.auth_type || 'password';
+      if (passInput) {
+        passInput.value = '';
+        passInput.placeholder = 'Deixe em branco para manter a senha atual';
+      }
+      if (keyPathInput) keyPathInput.value = identity.key_path || '';
+      if (passPhraseInput) {
+        passPhraseInput.value = '';
+        passPhraseInput.placeholder = 'Deixe em branco para manter a passphrase';
+      }
+    } else {
+      if (titleEl) titleEl.textContent = 'Nova Identidade';
+      if (idInput) idInput.value = '';
+      if (nameInput) nameInput.value = '';
+      if (userInput) userInput.value = '';
+      if (authTypeSelect) authTypeSelect.value = 'password';
+      if (passInput) {
+        passInput.value = '';
+        passInput.placeholder = 'Digite a senha';
+      }
+      if (keyPathInput) keyPathInput.value = '';
+      if (passPhraseInput) {
+        passPhraseInput.value = '';
+        passPhraseInput.placeholder = 'Passphrase da chave privada (se houver)';
+      }
+    }
+
+    const currentType = authTypeSelect ? authTypeSelect.value : 'password';
+    if (passGroup) passGroup.classList.toggle('hidden', currentType !== 'password');
+    if (keyGroup) keyGroup.classList.toggle('hidden', currentType !== 'key');
+
+    this.identityFormModalEl?.classList.remove('hidden');
+    nameInput?.focus();
+  }
+
+  closeIdentityForm() {
+    this.identityFormModalEl?.classList.add('hidden');
+  }
+
+  connectToHost(host) {
+    const termId = `term-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const termTitle = host.name || (host.host_type === 'ssh' ? `${host.hostname} (SSH)` : 'Local Shell');
+
+    const instance = new TerminalInstance(this, termId, termTitle);
+    this.terminals.set(termId, instance);
+
+    this.updateGridState();
+    this.setActiveTerminal(termId);
+
+    // Fecha o modal de hosts
+    this.closeHostsModal();
+
+    const payload = {
+      id: host.id,
+      termId,
+      cols: instance.term.cols || 80,
+      rows: instance.term.rows || 24
+    };
+
+    if (this.isElectron && window.termix?.hosts) {
+      window.termix.hosts.connect(payload);
+    } else if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        action: 'connect_host',
+        hostId: host.id,
+        termId,
+        cols: payload.cols,
+        rows: payload.rows
+      }));
+    }
+  }
+
+  escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 }
 
@@ -859,6 +1641,10 @@ class TerminalInstance {
     this.pid = msg.pid;
     this.shell = msg.shell;
     this.pidBadgeEl.textContent = `PID: ${this.pid} (${this.shell})`;
+    if (msg.title && this.titleTextEl) {
+      this.titleTextEl.textContent = msg.title;
+      this.title = msg.title;
+    }
   }
 
   handleExit(exitCode) {

@@ -87,6 +87,17 @@
 
       <!-- Ações Direitas -->
       <div class="navbar-right">
+        <!-- Botão Gerenciador de Hosts e Identidades (Estilo Termius) -->
+        <button id="btn-open-hosts" class="btn-action btn-secondary" title="Gerenciador de Hosts e Identidades (Estilo Termius)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+            <line x1="6" y1="6" x2="6.01" y2="6"></line>
+            <line x1="6" y1="18" x2="6.01" y2="18"></line>
+          </svg>
+          <span>Hosts</span>
+        </button>
+
         <!-- Botão de Transmissão / Broadcast -->
         <button id="btn-toggle-broadcast" class="btn-action btn-secondary" title="Transmitir mesmo comando para todos os terminais">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -174,14 +185,23 @@
           <p>Inicie instâncias independentes de shell integradas diretamente ao seu sistema operacional.</p>
           
           <div class="empty-quick-actions">
+            <button class="btn-quick-start btn-quick-host" id="btn-start-host">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                <rect x="2" y="2" width="20" height="8" rx="2"></rect>
+                <rect x="2" y="14" width="20" height="8" rx="2"></rect>
+                <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                <line x1="6" y1="18" x2="6.01" y2="18"></line>
+              </svg>
+              Hosts Salvos
+            </button>
             <button class="btn-quick-start" id="btn-start-single">
-              <span>+</span> Abrir 1 Terminal
+              <span>+</span> 1 Terminal
             </button>
             <button class="btn-quick-start" id="btn-start-pair">
-              <span>⫾</span> Abrir 2 Terminais (Lado a Lado)
+              <span>⫾</span> 2 Terminais
             </button>
             <button class="btn-quick-start" id="btn-start-quad">
-              <span>⧉</span> Abrir Grid 2x2 (4 Terminais)
+              <span>⧉</span> Grid 2x2
             </button>
           </div>
 
@@ -282,6 +302,234 @@
             <p><strong>Stack Tecnológica:</strong> macOS zsh / bash • Electron • Node.js • node-pty • WebSockets (ws) • xterm.js com FitAddon & WebLinks.</p>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Modal Principal: Gerenciador de Hosts e Identidades (Estilo Termius) -->
+    <div id="hosts-modal" class="modal-backdrop hidden">
+      <div class="modal-card modal-card-large">
+        <div class="modal-header">
+          <div class="hosts-modal-tabs">
+            <button class="hosts-tab-btn active" data-tab="hosts">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="2" width="20" height="8" rx="2"></rect>
+                <rect x="2" y="14" width="20" height="8" rx="2"></rect>
+                <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                <line x1="6" y1="18" x2="6.01" y2="18"></line>
+              </svg>
+              <span>Hosts Salvos</span>
+              <span class="tab-badge" id="hosts-count-badge">0</span>
+            </button>
+            <button class="hosts-tab-btn" data-tab="identities">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 2l-2 2m-1.5 1.5L16 7l-2-2-1.5 1.5 2 2L13 10l-1.5-1.5-2 2L11 12l-1.5 1.5L8 12l-2 2"></path>
+                <circle cx="7.5" cy="15.5" r="5.5"></circle>
+              </svg>
+              <span>Identidades & Credenciais</span>
+              <span class="tab-badge" id="identities-count-badge">0</span>
+            </button>
+          </div>
+          <button class="btn-modal-close" id="btn-close-hosts-modal">✕</button>
+        </div>
+
+        <div class="modal-body hosts-modal-body">
+          <!-- Aba: Hosts -->
+          <div id="tab-content-hosts" class="hosts-tab-pane active">
+            <div class="hosts-toolbar">
+              <div class="search-input-wrap">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="hosts-search-input" placeholder="Buscar por nome, IP, tag..." autocomplete="off">
+              </div>
+
+              <div class="toolbar-actions">
+                <select id="hosts-filter-type" class="select-filter">
+                  <option value="all">Todos os tipos</option>
+                  <option value="ssh">Apenas SSH</option>
+                  <option value="local">Apenas Local</option>
+                </select>
+                <button id="btn-add-host" class="btn-action btn-primary">
+                  <span>+</span> Novo Host
+                </button>
+              </div>
+            </div>
+
+            <!-- Lista de Hosts -->
+            <div id="hosts-list" class="hosts-cards-grid">
+              <!-- Renderizado dinamicamente via JS -->
+            </div>
+
+            <div id="hosts-empty" class="hosts-empty-view hidden">
+              <p>Nenhum host encontrado. Clique em <strong>+ Novo Host</strong> para cadastrar seu primeiro ambiente!</p>
+            </div>
+          </div>
+
+          <!-- Aba: Identidades -->
+          <div id="tab-content-identities" class="hosts-tab-pane">
+            <div class="hosts-toolbar">
+              <div class="encryption-notice">
+                <span class="lock-icon">🔒</span>
+                <span>Credenciais criptografadas com <strong>AES-256-GCM</strong> em SQLite local</span>
+              </div>
+              <button id="btn-add-identity" class="btn-action btn-primary">
+                <span>+</span> Nova Identidade
+              </button>
+            </div>
+
+            <!-- Lista de Identidades -->
+            <div id="identities-list" class="identities-cards-grid">
+              <!-- Renderizado dinamicamente via JS -->
+            </div>
+
+            <div id="identities-empty" class="hosts-empty-view hidden">
+              <p>Nenhuma identidade salva. Crie uma identidade para vincular aos seus servidores SSH.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Formulário: Criar / Editar Host -->
+    <div id="host-form-modal" class="modal-backdrop hidden">
+      <div class="modal-card modal-card-form">
+        <div class="modal-header">
+          <h3 id="host-form-title">Configurar Host</h3>
+          <button class="btn-modal-close" id="btn-close-host-form">✕</button>
+        </div>
+        <form id="form-host" class="modal-body form-body">
+          <input type="hidden" id="host-input-id">
+
+          <div class="form-group">
+            <label for="host-input-name">Nome do Host / Conexão *</label>
+            <input type="text" id="host-input-name" required placeholder="Ex: API Produção AWS, Banco Staging, Dev Local">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="host-input-type">Tipo de Conexão *</label>
+              <select id="host-input-type">
+                <option value="ssh">SSH Remoto</option>
+                <option value="local">Terminal Local</option>
+              </select>
+            </div>
+
+            <div class="form-group flex-1">
+              <label for="host-input-color">Cor da Tag</label>
+              <select id="host-input-color">
+                <option value="#38bdf8">Azul Ciano</option>
+                <option value="#10b981">Verde Esmeralda</option>
+                <option value="#f59e0b">Amarelo Âmbar</option>
+                <option value="#f43f5e">Rosa Coral</option>
+                <option value="#a855f7">Roxo Violeta</option>
+                <option value="#64748b">Cinza Ardósia</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="host-ssh-fields" class="form-ssh-fields">
+            <div class="form-row">
+              <div class="form-group flex-3">
+                <label for="host-input-hostname">Hostname / IP *</label>
+                <input type="text" id="host-input-hostname" placeholder="Ex: 192.168.1.100 ou api.meuhost.com">
+              </div>
+              <div class="form-group flex-1">
+                <label for="host-input-port">Porta</label>
+                <input type="number" id="host-input-port" value="22" min="1" max="65535">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <div class="label-with-link">
+                <label for="host-input-identity">Identidade / Credencial</label>
+                <a href="#" id="link-create-identity-quick">+ Criar Identidade</a>
+              </div>
+              <select id="host-input-identity">
+                <option value="">Sem identidade (solicitar senha na hora)</option>
+                <!-- Preenchido dinamicamente -->
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="host-input-path">Diretório Padrão (Default Path)</label>
+            <input type="text" id="host-input-path" placeholder="Ex: /var/www/meu-app ou ~/projetos">
+            <span class="field-hint">O terminal iniciará diretamente nesta pasta ao conectar.</span>
+          </div>
+
+          <div class="form-group">
+            <label for="host-input-command">Comando de Inicialização (Startup Command)</label>
+            <input type="text" id="host-input-command" placeholder="Ex: docker compose logs -f, git status, htop">
+            <span class="field-hint">Comando executado automaticamente logo após a abertura da sessão.</span>
+          </div>
+
+          <div class="form-group">
+            <label for="host-input-tags">Tags / Categorias (separadas por vírgula)</label>
+            <input type="text" id="host-input-tags" placeholder="Ex: Produção, Docker, AWS, Node">
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="btn-action btn-secondary" id="btn-cancel-host-form">Cancelar</button>
+            <button type="submit" class="btn-action btn-primary" id="btn-save-host">Salvar Host</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal Formulário: Criar / Editar Identidade -->
+    <div id="identity-form-modal" class="modal-backdrop hidden">
+      <div class="modal-card modal-card-form">
+        <div class="modal-header">
+          <h3 id="identity-form-title">Configurar Identidade</h3>
+          <button class="btn-modal-close" id="btn-close-identity-form">✕</button>
+        </div>
+        <form id="form-identity" class="modal-body form-body">
+          <input type="hidden" id="identity-input-id">
+
+          <div class="form-group">
+            <label for="identity-input-name">Nome da Identidade *</label>
+            <input type="text" id="identity-input-name" required placeholder="Ex: Root Produção, Deploy AWS, Usuário Padrão">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="identity-input-username">Usuário (SSH User) *</label>
+              <input type="text" id="identity-input-username" required placeholder="Ex: root, ubuntu, deploy">
+            </div>
+
+            <div class="form-group flex-1">
+              <label for="identity-input-auth-type">Método de Autenticação *</label>
+              <select id="identity-input-auth-type">
+                <option value="password">Senha</option>
+                <option value="key">Chave Privada SSH</option>
+                <option value="agent">Agente SSH / Sem Segredo</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="identity-password-field" class="form-group">
+            <label for="identity-input-password">Senha de Acesso</label>
+            <input type="password" id="identity-input-password" placeholder="Digite a senha (em branco para manter)">
+            <span class="field-hint">🔒 Armazenada com criptografia forte AES-256 no banco SQLite local.</span>
+          </div>
+
+          <div id="identity-key-fields" class="form-group hidden">
+            <div class="form-group">
+              <label for="identity-input-key-path">Caminho da Chave Privada</label>
+              <input type="text" id="identity-input-key-path" placeholder="Ex: ~/.ssh/id_rsa ou ~/.ssh/aws_prod.pem">
+            </div>
+            <div class="form-group">
+              <label for="identity-input-passphrase">Passphrase da Chave (Opcional)</label>
+              <input type="password" id="identity-input-passphrase" placeholder="Passphrase da chave privada (se houver)">
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="btn-action btn-secondary" id="btn-cancel-identity-form">Cancelar</button>
+            <button type="submit" class="btn-action btn-primary" id="btn-save-identity">Salvar Identidade</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>

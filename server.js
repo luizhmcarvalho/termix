@@ -8,9 +8,12 @@ require('./fix-permissions');
 
 const http = require('http');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const express = require('express');
 const { WebSocketServer } = require('ws');
 const pty = require('node-pty');
+const DatabaseManager = require('./services/db');
 
 const PORT = process.env.PORT || 3333;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -22,6 +25,12 @@ const DEFAULT_CWD = process.env.HOME || process.cwd();
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
+
+// Inicializa banco de dados SQLite local
+const db = new DatabaseManager(path.join(os.homedir(), '.termix'));
+
+// Middleware para parsing de JSON
+app.use(express.json());
 
 // Armazena todas as instâncias de pseudoterminais ativas: Map<terminalId, { id, ptyProcess, ws, title, createdAt }>
 const terminals = new Map();
@@ -53,6 +62,41 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+// Rotas da API para Hosts & Identidades (SQLite Local)
+app.get('/api/hosts', (req, res) => {
+  res.json(db.getHosts());
+});
+
+app.post('/api/hosts', (req, res) => {
+  try {
+    const saved = db.saveHost(req.body);
+    res.json(saved);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/hosts/:id', (req, res) => {
+  res.json(db.deleteHost(req.params.id));
+});
+
+app.get('/api/identities', (req, res) => {
+  res.json(db.getIdentities());
+});
+
+app.post('/api/identities', (req, res) => {
+  try {
+    const saved = db.saveIdentity(req.body);
+    res.json(saved);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/identities/:id', (req, res) => {
+  res.json(db.deleteIdentity(req.params.id));
+});
+
 /**
  * Cria uma nova instância de terminal pseudoterminal (node-pty)
  */
@@ -62,11 +106,21 @@ function createTerminalSession(ws, options = {}) {
     cols = 80,
     rows = 24,
     shell = DEFAULT_SHELL,
+    args = [],
     cwd = DEFAULT_CWD,
-    title = 'Terminal'
+    title = 'Terminal',
+    startupCommand = null
   } = options;
 
   try {
+    let targetCwd = cwd;
+    if (typeof targetCwd === 'string' && targetCwd.startsWith('~')) {
+      targetCwd = path.join(os.homedir(), targetCwd.slice(1));
+    }
+    if (!targetCwd || !fs.existsSync(targetCwd)) {
+      targetCwd = DEFAULT_CWD;
+    }
+
     // Configura variáveis de ambiente ideais para terminal 256 cores no macOS
     const env = {
       ...process.env,
@@ -76,11 +130,11 @@ function createTerminalSession(ws, options = {}) {
       LC_ALL: process.env.LC_ALL || 'en_US.UTF-8'
     };
 
-    const ptyProcess = pty.spawn(shell, [], {
+    const ptyProcess = pty.spawn(shell, args, {
       name: 'xterm-256color',
       cols: Math.max(10, parseInt(cols, 10) || 80),
       rows: Math.max(5, parseInt(rows, 10) || 24),
-      cwd,
+      cwd: targetCwd,
       env
     });
 
@@ -95,6 +149,18 @@ function createTerminalSession(ws, options = {}) {
     terminals.set(id, session);
 
     console.log(`[Termix] Terminal criado [${id}] - PID: ${ptyProcess.pid}, Shell: ${shell}`);
+
+    // Executa comando de inicialização se configurado
+    if (startupCommand && typeof startupCommand === 'string' && startupCommand.trim()) {
+      setTimeout(() => {
+        try {
+          const cmd = startupCommand.trim();
+          ptyProcess.write(cmd.endsWith('\r') ? cmd : cmd + '\r');
+        } catch (e) {
+          console.warn('[Termix] Falha ao enviar comando de inicialização:', e.message);
+        }
+      }, 400);
+    }
 
     // Envia dados do processo PTY para o navegador via WebSocket
     ptyProcess.onData((data) => {
@@ -143,6 +209,74 @@ function createTerminalSession(ws, options = {}) {
 }
 
 /**
+ * Conecta a um Host configurado (SSH ou Local) via WebSocket
+ */
+function connectHostSession(ws, hostId, options = {}) {
+  const host = db.getHost(hostId, true);
+  if (!host) {
+    ws.send(JSON.stringify({
+      action: 'error',
+      message: `Host com ID ${hostId} não encontrado.`
+    }));
+    return null;
+  }
+
+  const { cols = 80, rows = 24 } = options;
+  const id = options.termId || options.terminalId || `term-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+  if (host.host_type === 'local') {
+    return createTerminalSession(ws, {
+      id,
+      cols,
+      rows,
+      title: host.name,
+      cwd: host.default_path || DEFAULT_CWD,
+      startupCommand: host.startup_command
+    });
+  }
+
+  // Conexão SSH
+  const identity = host.identity;
+  const sshArgs = [];
+
+  if (host.port && parseInt(host.port, 10) !== 22) {
+    sshArgs.push('-p', String(host.port));
+  }
+
+  if (identity && identity.key_path) {
+    let keyPath = identity.key_path.trim();
+    if (keyPath.startsWith('~')) {
+      keyPath = path.join(os.homedir(), keyPath.slice(1));
+    }
+    if (fs.existsSync(keyPath)) {
+      sshArgs.push('-i', keyPath);
+    }
+  }
+
+  const userPrefix = identity && identity.username ? `${identity.username}@` : '';
+  const target = `${userPrefix}${host.hostname}`;
+
+  if (host.default_path || host.startup_command) {
+    const cdPart = host.default_path ? `cd "${host.default_path}" && ` : '';
+    const cmdPart = host.startup_command ? `${host.startup_command}; ` : '';
+    const remoteCommand = `${cdPart}${cmdPart}exec $SHELL -l`;
+    sshArgs.push('-t', target, remoteCommand);
+  } else {
+    sshArgs.push(target);
+  }
+
+  return createTerminalSession(ws, {
+    id,
+    cols,
+    rows,
+    shell: '/usr/bin/ssh',
+    args: sshArgs,
+    title: `${host.name} (SSH)`,
+    cwd: DEFAULT_CWD
+  });
+}
+
+/**
  * Fecha e encerra um terminal com segurança
  */
 function closeTerminalSession(id) {
@@ -178,6 +312,10 @@ wss.on('connection', (ws) => {
       switch (action) {
         case 'create':
           createTerminalSession(ws, payload);
+          break;
+
+        case 'connect_host':
+          connectHostSession(ws, payload.hostId, payload);
           break;
 
         case 'input':

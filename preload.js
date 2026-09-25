@@ -98,5 +98,21 @@ contextBridge.exposeInMainWorld('termix', {
     const handler = () => callback();
     ipcRenderer.on('menu:show-about', handler);
     return () => ipcRenderer.removeListener('menu:show-about', handler);
+  },
+
+  // Gerenciamento de Hosts e Identidades (SQLite Local com Criptografia)
+  hosts: {
+    list: () => ipcRenderer.invoke('db:hosts:list'),
+    get: (id) => ipcRenderer.invoke('db:hosts:get', id),
+    save: (data) => ipcRenderer.invoke('db:hosts:save', data),
+    delete: (id) => ipcRenderer.invoke('db:hosts:delete', id),
+    connect: (options) => ipcRenderer.invoke('db:hosts:connect', options)
+  },
+
+  identities: {
+    list: () => ipcRenderer.invoke('db:identities:list'),
+    get: (id) => ipcRenderer.invoke('db:identities:get', id),
+    save: (data) => ipcRenderer.invoke('db:identities:save', data),
+    delete: (id) => ipcRenderer.invoke('db:identities:delete', id)
   }
 });

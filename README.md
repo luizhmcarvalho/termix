@@ -26,6 +26,12 @@ Diferente de alternativas baseadas puramente em navegadores web locais que prend
 ## ✨ Principais Funcionalidades
 
 - **⚡ Pseudoterminais Reais (node-pty):** Criação de instâncias nativas do seu shell padrão (`/bin/zsh`, `bash`, `fish`) com suporte total a PTY, cores ANSI 256/Truecolor e interatividade com programas como `htop`, `vim`, `ssh` e `docker`.
+- **🌐 Gerenciador de Hosts e Identidades (Estilo Termius):**
+  - Cadastro organizado de **Hosts SSH remotos** e **Sessões Locais**.
+  - **Diretório Padrão (*Default Path*):** Abertura automática da sessão navegando diretamente para a pasta do seu projeto ou repositório.
+  - **Comando de Inicialização (*Startup Command*):** Execução automática de comandos no momento da conexão (ex: `docker compose ps`, `git status`, `tail -f logs`).
+  - **Identidades & Credenciais Criptografadas:** Senhas e chaves privadas SSH salvas localmente em banco **SQLite (`~/.termix/termix.db`)** protegidas com criptografia autenticada de nível militar **AES-256-GCM**.
+  - Tags coloridas e categorização rápida para servidores de Produção, Staging e Desenvolvimento.
 - **🖥️ Layouts Dinâmicos em Mosaico:** Alterne instantaneamente entre visualização em mosaico automático (*Auto Grid*), 1 Coluna (Foco), 2 Colunas lado a lado ou 3 Colunas.
 - **📡 Broadcast de Comandos Sincronizado:** Transmita o mesmo comando simultaneamente para todas as instâncias ativas com um único clique ou atalho de teclado (<kbd>⌘</kbd> + <kbd>B</kbd>).
 - **📋 Suporte Completo à Área de Transferência do macOS:**
@@ -136,6 +142,7 @@ Os artefatos gerados são salvos no diretório `dist/`:
 | <kbd>⌘</kbd> + <kbd>A</kbd> | **Selecionar tudo** no buffer do terminal ativo |
 | <kbd>⌘</kbd> + <kbd>K</kbd> ou <kbd>⌃</kbd> + <kbd>L</kbd> | **Limpar** o buffer de saída do terminal |
 | <kbd>⌘</kbd> + <kbd>T</kbd> ou <kbd>⌥</kbd> + <kbd>T</kbd> | Abrir uma nova sessão de terminal |
+| <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>H</kbd> ou <kbd>⌥</kbd> + <kbd>H</kbd> | Abrir o **Gerenciador de Hosts e Identidades** |
 | <kbd>⌘</kbd> + <kbd>B</kbd> ou <kbd>⌥</kbd> + <kbd>B</kbd> | Abrir ou fechar a barra de comando **Broadcast** |
 | <kbd>⌘</kbd> + <kbd>J</kbd> ou <kbd>⌥</kbd> + <kbd>J</kbd> | Alternar entre tema **Claro** e **Escuro** |
 | <kbd>⌥</kbd> + <kbd>M</kbd> | **Maximizar / Restaurar** o tamanho do terminal focado |
@@ -153,6 +160,8 @@ Os artefatos gerados são salvos no diretório `dist/`:
 | :--- | :--- | :--- |
 | **Runtime Desktop** | [Electron](https://www.electronjs.org/) | Container desktop nativo com integração profunda ao macOS |
 | **Engine PTY** | [node-pty](https://github.com/microsoft/node-pty) | Forks reais de pseudoterminais integrados ao shell do sistema |
+| **Banco de Dados Local** | `node:sqlite` (SQLite Sync) | Persistência ultra-rápida e nativa de hosts e identidades salvas |
+| **Segurança & Criptografia** | `node:crypto` (AES-256-GCM) | Criptografia autenticada local para senhas e passphrases SSH |
 | **Terminal Frontend** | [xterm.js](https://xtermjs.org/) | Renderizador de emulação de terminal de alto desempenho |
 | **Addons xterm** | `@xterm/addon-fit`, `@xterm/addon-web-links` | Ajuste dinâmico de viewport e links clicáveis |
 | **Empacotamento** | [electron-builder](https://www.electron.build/) | Geração de instaladores `.dmg` e `.app` para macOS |
