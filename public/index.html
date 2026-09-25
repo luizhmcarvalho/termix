@@ -39,99 +39,115 @@
             </svg>
           </div>
           <span class="brand-title">Termix</span>
-          <span class="brand-badge">macOS PTY</span>
+          <span class="brand-badge hidden">macOS PTY</span>
         </div>
 
-        <div class="system-status-chip" id="system-status-chip">
+        <div class="system-status-chip hidden" id="system-status-chip">
           <span class="status-indicator"></span>
           <span id="system-info-text">Conectando...</span>
         </div>
       </div>
 
-      <!-- Ações Centrais e Controles de Layout -->
+      <!-- Ações Centrais e Controles de Layout em Dropdown -->
       <div class="navbar-center">
-        <div class="layout-selector-group">
-          <span class="control-label">Layout:</span>
-          <button class="btn-layout active" data-layout="auto" title="Layout em Mosaico Automático">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="7" height="7"></rect>
-              <rect x="14" y="3" width="7" height="7"></rect>
-              <rect x="14" y="14" width="7" height="7"></rect>
-              <rect x="3" y="14" width="7" height="7"></rect>
+        <div class="layout-dropdown-container" id="layout-dropdown-container">
+          <button id="btn-layout-dropdown" class="btn-layout-dropdown-trigger" title="Selecionar Layout da Grade" type="button" aria-haspopup="true" aria-expanded="false">
+            <span id="active-layout-icon" class="active-layout-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+            </span>
+            <span id="active-layout-label" class="active-layout-label">Auto</span>
+            <svg class="dropdown-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
-            Auto
           </button>
-          <button class="btn-layout" data-layout="1col" title="1 Coluna (Foco)">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="4" y="4" width="16" height="16" rx="2"></rect>
-            </svg>
-            1 Col
-          </button>
-          <button class="btn-layout" data-layout="2col" title="2 Colunas Lado a Lado">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="4" width="8" height="16" rx="1"></rect>
-              <rect x="13" y="4" width="8" height="16" rx="1"></rect>
-            </svg>
-            2 Col
-          </button>
-          <button class="btn-layout" data-layout="3col" title="3 Colunas">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="4" width="5" height="16" rx="1"></rect>
-              <rect x="9.5" y="4" width="5" height="16" rx="1"></rect>
-              <rect x="17" y="4" width="5" height="16" rx="1"></rect>
-            </svg>
-            3 Col
-          </button>
+
+          <div id="layout-dropdown-menu" class="layout-dropdown-menu hidden">
+            <div class="dropdown-header-title">Layout da Grade</div>
+            <button class="layout-dropdown-item btn-layout active" data-layout="auto" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+              <span>Mosaico Auto</span>
+            </button>
+            <button class="layout-dropdown-item btn-layout" data-layout="1col" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+              </svg>
+              <span>1 Coluna (Foco)</span>
+            </button>
+            <button class="layout-dropdown-item btn-layout" data-layout="2col" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="8" height="16" rx="1"></rect>
+                <rect x="13" y="4" width="8" height="16" rx="1"></rect>
+              </svg>
+              <span>2 Colunas</span>
+            </button>
+            <button class="layout-dropdown-item btn-layout" data-layout="3col" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="4" width="5" height="16" rx="1"></rect>
+                <rect x="9.5" y="4" width="5" height="16" rx="1"></rect>
+                <rect x="17" y="4" width="5" height="16" rx="1"></rect>
+              </svg>
+              <span>3 Colunas</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- Ações Direitas -->
+      <!-- Ações Direitas (Ícones Compactos) -->
       <div class="navbar-right">
-        <!-- Botão Workspaces (Conjuntos de Terminais Salvos) -->
-        <button id="btn-open-workspaces" class="btn-action btn-secondary" title="Workspaces Salvos (Atalho: Alt + W ou Cmd + Shift + W)">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Workspaces (Ícone) -->
+        <button id="btn-open-workspaces" class="btn-topbar-icon" title="Workspaces Salvos (Alt + W ou ⌘ + ⇧ + W)" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="7"></rect>
             <rect x="14" y="3" width="7" height="7"></rect>
             <rect x="14" y="14" width="7" height="7"></rect>
             <rect x="3" y="14" width="7" height="7"></rect>
           </svg>
-          <span>Workspaces</span>
         </button>
 
-        <!-- Botão Gerenciador de Hosts e Identidades (Estilo Termius) -->
-        <button id="btn-open-hosts" class="btn-action btn-secondary" title="Gerenciador de Hosts e Identidades (Estilo Termius)">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Hosts (Ícone) -->
+        <button id="btn-open-hosts" class="btn-topbar-icon" title="Gerenciador de Hosts e Identidades (Alt + H ou ⌘ + ⇧ + H)" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
             <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
             <line x1="6" y1="6" x2="6.01" y2="6"></line>
             <line x1="6" y1="18" x2="6.01" y2="18"></line>
           </svg>
-          <span>Hosts</span>
         </button>
 
-        <!-- Botão de Transmissão / Broadcast -->
-        <button id="btn-toggle-broadcast" class="btn-action btn-secondary" title="Transmitir mesmo comando para todos os terminais">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Broadcast (Ícone) -->
+        <button id="btn-toggle-broadcast" class="btn-topbar-icon" title="Transmitir para Todos os Terminais (Alt + B ou ⌘ + B)" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"></path>
             <path d="M7.8 16.2c-2.3-2.3-2.3-6.2 0-8.5"></path>
             <circle cx="12" cy="12" r="2"></circle>
             <path d="M16.2 7.8c2.3 2.3 2.3 6.2 0 8.5"></path>
             <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"></path>
           </svg>
-          Broadcast
         </button>
 
-        <!-- Botão Novo Terminal -->
-        <button id="btn-new-terminal" class="btn-action btn-primary" title="Abrir novo terminal (Atalho: Ctrl+Shift+T ou Alt+T)">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Separador vertical sutil -->
+        <div class="topbar-divider"></div>
+
+        <!-- Novo Terminal (Ícone com Destaque Primário) -->
+        <button id="btn-new-terminal" class="btn-topbar-icon btn-topbar-primary" title="Novo Terminal (Alt + T ou ⌘ + T)" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          <span>Novo Terminal</span>
         </button>
 
-        <!-- Botão Alternar Tema (Claro / Escuro) -->
-        <button id="btn-theme-toggle" class="btn-icon" title="Alternar Tema Claro / Escuro (Alt + J)">
+        <!-- Alternar Tema (Ícone) -->
+        <button id="btn-theme-toggle" class="btn-topbar-icon" title="Alternar Tema Claro / Escuro (Alt + J)" type="button">
           <svg id="icon-theme-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="5"></circle>
             <line x1="12" y1="1" x2="12" y2="3"></line>
@@ -148,8 +164,8 @@
           </svg>
         </button>
 
-        <!-- Botão de Ajuda / Atalhos -->
-        <button id="btn-help" class="btn-icon" title="Atalhos de teclado e ajuda">
+        <!-- Ajuda (Ícone) -->
+        <button id="btn-help" class="btn-topbar-icon" title="Atalhos de teclado e ajuda" type="button">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"></circle>
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>

@@ -411,6 +411,53 @@ class TermixDashboard {
       btn.classList.toggle('active', btn.getAttribute('data-layout') === layout);
     });
 
+    // Atualiza o botão dropdown de layout
+    const labelEl = document.getElementById('active-layout-label');
+    const iconEl = document.getElementById('active-layout-icon');
+    const dropdownMenu = document.getElementById('layout-dropdown-menu');
+    const dropdownBtn = document.getElementById('btn-layout-dropdown');
+
+    const layoutLabels = {
+      'auto': 'Auto',
+      '1col': '1 Col',
+      '2col': '2 Col',
+      '3col': '3 Col'
+    };
+
+    const layoutIcons = {
+      'auto': `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>`,
+      '1col': `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+              </svg>`,
+      '2col': `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="8" height="16" rx="1"></rect>
+                <rect x="13" y="4" width="8" height="16" rx="1"></rect>
+              </svg>`,
+      '3col': `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="4" width="5" height="16" rx="1"></rect>
+                <rect x="9.5" y="4" width="5" height="16" rx="1"></rect>
+                <rect x="17" y="4" width="5" height="16" rx="1"></rect>
+              </svg>`
+    };
+
+    if (labelEl && layoutLabels[layout]) {
+      labelEl.textContent = layoutLabels[layout];
+    }
+    if (iconEl && layoutIcons[layout]) {
+      iconEl.innerHTML = layoutIcons[layout];
+    }
+    if (dropdownMenu) {
+      dropdownMenu.classList.add('hidden');
+    }
+    if (dropdownBtn) {
+      dropdownBtn.setAttribute('aria-expanded', 'false');
+    }
+
     this.fitAll();
   }
 
@@ -486,6 +533,23 @@ class TermixDashboard {
     document.getElementById('btn-start-quad')?.addEventListener('click', () => {
       for (let i = 1; i <= 4; i++) {
         setTimeout(() => this.createNewTerminal(`Terminal ${i}`), i * 80);
+      }
+    });
+
+    // Toggle do dropdown de Layout
+    const btnLayoutDropdown = document.getElementById('btn-layout-dropdown');
+    const layoutDropdownMenu = document.getElementById('layout-dropdown-menu');
+
+    btnLayoutDropdown?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isHidden = layoutDropdownMenu?.classList.toggle('hidden');
+      btnLayoutDropdown.setAttribute('aria-expanded', (!isHidden).toString());
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#layout-dropdown-container')) {
+        layoutDropdownMenu?.classList.add('hidden');
+        btnLayoutDropdown?.setAttribute('aria-expanded', 'false');
       }
     });
 
@@ -588,6 +652,8 @@ class TermixDashboard {
       }
 
       if (e.key === 'Escape') {
+        layoutDropdownMenu?.classList.add('hidden');
+        btnLayoutDropdown?.setAttribute('aria-expanded', 'false');
         this.helpModalEl?.classList.add('hidden');
         this.broadcastBarEl?.classList.add('hidden');
         this.hostFormModalEl?.classList.add('hidden');
