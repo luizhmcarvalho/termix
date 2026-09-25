@@ -365,10 +365,10 @@ function connectHostSession(ws, hostId, options = {}) {
 
   // Se houver default_path ou startup_command remoto
   if (host.default_path || host.startup_command) {
-    const cdPart = host.default_path ? `if [ -d "${host.default_path}" ]; then cd "${host.default_path}"; fi; ` : '';
+    const cdPart = host.default_path ? `if cd "${host.default_path.replace(/"/g, '\\"')}" 2>/dev/null; then :; fi; ` : '';
     const cmdPart = host.startup_command ? `${host.startup_command}; ` : '';
-    // Executa shell interativo com fallback resiliente para evitar desconexão se $SHELL não estiver exportado
-    const remoteCommand = `${cdPart}${cmdPart}exec "\${SHELL:-/bin/bash}" -l 2>/dev/null || exec /bin/sh -i`;
+    // Garante inicialização interativa e login (-l -i) para carregar o .bashrc/.zshrc e exporta PS1 fallback para sempre exibir o prompt com o path
+    const remoteCommand = `${cdPart}${cmdPart}[ -z "$PS1" ] && export PS1='\\u@\\h:\\w\\$ '; exec "\${SHELL:-/bin/bash}" -l -i 2>/dev/null || exec /bin/sh -i`;
     sshArgs.push(target, remoteCommand);
   } else {
     sshArgs.push(target);
