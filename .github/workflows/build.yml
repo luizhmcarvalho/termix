@@ -20,7 +20,7 @@ jobs:
           - os: macos-latest
             target: "--mac"
             artifact_name: "Termix-macOS"
-          - os: windows-latest
+          - os: windows-2022
             target: "--win"
             artifact_name: "Termix-Windows"
           - os: ubuntu-latest
@@ -37,14 +37,7 @@ jobs:
           node-version: 22
           cache: 'npm'
 
-      - name: Configurar MSVC no Windows
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-          vsversion: '2022'
-
-      - name: Configurar npm para Visual Studio 2022 no Windows
+      - name: Configurar Visual Studio 2022 no Windows
         if: runner.os == 'Windows'
         run: npm config set msvs_version 2022
 
