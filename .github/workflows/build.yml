@@ -37,6 +37,17 @@ jobs:
           node-version: 22
           cache: 'npm'
 
+      - name: Configurar MSVC no Windows
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+          vsversion: '2022'
+
+      - name: Configurar npm para Visual Studio 2022 no Windows
+        if: runner.os == 'Windows'
+        run: npm config set msvs_version 2022
+
       - name: Instalar dependências no Linux (se aplicável)
         if: runner.os == 'Linux'
         run: |
@@ -44,7 +55,7 @@ jobs:
           sudo apt-get install -y libarchive-tools
 
       - name: Instalar dependências
-        run: npm install
+        run: npm install --ignore-scripts
 
       - name: Rebuild módulos nativos (node-pty)
         run: npm run rebuild
