@@ -82,6 +82,12 @@ class TermixDashboard {
     this.hostsSearchQuery = '';
     this.activeHostsTab = 'hosts';
 
+    // Modais e Estado de Workspaces (Conjuntos de Terminais Salvos)
+    this.workspacesModalEl = document.getElementById('workspaces-modal');
+    this.workspaceFormModalEl = document.getElementById('workspace-form-modal');
+    this.savedWorkspaces = [];
+    this.workspacesSearchQuery = '';
+
     // Inicializa o tema visual
     this.applyTheme(this.currentTheme);
 
@@ -94,6 +100,7 @@ class TermixDashboard {
 
     this.initGlobalEvents();
     this.initHostsManager();
+    this.initWorkspacesManager();
   }
 
   /**
@@ -574,12 +581,20 @@ class TermixDashboard {
         this.openHostsModal();
       }
 
+      // Alt + W ou Cmd + Shift + W: Gerenciador de Workspaces
+      if ((e.altKey && e.code === 'KeyW') || (e.metaKey && e.shiftKey && e.code === 'KeyW')) {
+        e.preventDefault();
+        this.openWorkspacesModal();
+      }
+
       if (e.key === 'Escape') {
         this.helpModalEl?.classList.add('hidden');
         this.broadcastBarEl?.classList.add('hidden');
         this.hostFormModalEl?.classList.add('hidden');
         this.identityFormModalEl?.classList.add('hidden');
         this.hostsModalEl?.classList.add('hidden');
+        this.workspaceFormModalEl?.classList.add('hidden');
+        this.workspacesModalEl?.classList.add('hidden');
       }
     });
 
@@ -1304,6 +1319,9 @@ class TermixDashboard {
     const termTitle = host.name || (host.host_type === 'ssh' ? `${host.hostname} (SSH)` : 'Local Shell');
 
     const instance = new TerminalInstance(this, termId, termTitle);
+    instance.hostId = host.id;
+    instance.hostName = host.name;
+
     this.terminals.set(termId, instance);
 
     this.updateGridState();
@@ -1340,6 +1358,562 @@ class TermixDashboard {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
   }
+
+  // ==========================================================================
+  // GERENCIADOR DE WORKSPACES (Conjuntos de Terminais Salvos)
+  // ==========================================================================
+
+  initWorkspacesManager() {
+    // Botão abrir modal
+    document.getElementById('btn-open-workspaces')?.addEventListener('click', () => this.openWorkspacesModal());
+    document.getElementById('btn-quick-workspaces')?.addEventListener('click', () => this.openWorkspacesModal());
+
+    // Fechar modal
+    document.getElementById('btn-close-workspaces-modal')?.addEventListener('click', () => this.closeWorkspacesModal());
+    this.workspacesModalEl?.addEventListener('click', (e) => {
+      if (e.target === this.workspacesModalEl) this.closeWorkspacesModal();
+    });
+
+    // Busca
+    document.getElementById('workspaces-search-input')?.addEventListener('input', (e) => {
+      this.workspacesSearchQuery = e.target.value;
+      this.renderWorkspacesList();
+    });
+
+    // Salvar Sessão Atual
+    document.getElementById('btn-save-current-session')?.addEventListener('click', () => {
+      this.openSaveCurrentSessionModal();
+    });
+
+    // Novo Workspace
+    document.getElementById('btn-add-workspace')?.addEventListener('click', () => {
+      this.openWorkspaceForm();
+    });
+
+    // Form modal fechar
+    document.getElementById('btn-close-workspace-form')?.addEventListener('click', () => this.closeWorkspaceForm());
+    document.getElementById('btn-cancel-workspace-form')?.addEventListener('click', () => this.closeWorkspaceForm());
+    this.workspaceFormModalEl?.addEventListener('click', (e) => {
+      if (e.target === this.workspaceFormModalEl) this.closeWorkspaceForm();
+    });
+
+    // Botão adicionar linha de terminal no formulário
+    document.getElementById('btn-add-terminal-row')?.addEventListener('click', () => {
+      this.addWorkspaceTerminalRow();
+    });
+
+    // Submit do formulário de Workspace
+    document.getElementById('form-workspace')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        const id = document.getElementById('workspace-input-id')?.value || undefined;
+        const name = document.getElementById('workspace-input-name')?.value?.trim();
+        const layout = document.getElementById('workspace-input-layout')?.value || 'auto';
+        const color = document.getElementById('workspace-input-color')?.value || '#8b5cf6';
+        const description = document.getElementById('workspace-input-description')?.value?.trim() || '';
+
+        if (!name) return;
+
+        // Coleta todos os terminais definidos nas linhas
+        const termRows = document.querySelectorAll('.workspace-term-row');
+        const terminals = [];
+        termRows.forEach(row => {
+          const title = row.querySelector('.term-row-title')?.value?.trim() || 'Terminal';
+          const type = row.querySelector('.term-row-type')?.value || 'local';
+          const host_id = row.querySelector('.term-row-host')?.value || null;
+          const cwd = row.querySelector('.term-row-cwd')?.value?.trim() || '';
+          const startup_command = row.querySelector('.term-row-cmd')?.value?.trim() || '';
+
+          terminals.push({
+            title,
+            type,
+            host_id: type === 'host' ? host_id : null,
+            cwd: type === 'local' ? cwd : '',
+            startup_command
+          });
+        });
+
+        if (terminals.length === 0) {
+          alert('Adicione ao menos um terminal ao workspace.');
+          return;
+        }
+
+        const payload = {
+          id,
+          name,
+          layout,
+          color,
+          description,
+          terminals
+        };
+
+        await this.apiSaveWorkspace(payload);
+        this.closeWorkspaceForm();
+        await this.refreshWorkspaces();
+      } catch (err) {
+        alert('Erro ao salvar workspace: ' + err.message);
+      }
+    });
+  }
+
+  async apiGetWorkspaces() {
+    try {
+      if (this.isElectron && window.termix?.workspaces) {
+        return await window.termix.workspaces.list();
+      }
+      const res = await fetch('/api/workspaces');
+      return await res.json();
+    } catch (err) {
+      console.error('[Termix] Falha ao listar workspaces:', err);
+      return [];
+    }
+  }
+
+  async apiSaveWorkspace(data) {
+    if (this.isElectron && window.termix?.workspaces) {
+      return await window.termix.workspaces.save(data);
+    }
+    const res = await fetch('/api/workspaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return await res.json();
+  }
+
+  async apiDeleteWorkspace(id) {
+    if (this.isElectron && window.termix?.workspaces) {
+      return await window.termix.workspaces.delete(id);
+    }
+    const res = await fetch(`/api/workspaces/${id}`, { method: 'DELETE' });
+    return await res.json();
+  }
+
+  async openWorkspacesModal() {
+    await this.refreshWorkspaces();
+    this.workspacesModalEl?.classList.remove('hidden');
+    document.getElementById('workspaces-search-input')?.focus();
+  }
+
+  closeWorkspacesModal() {
+    this.workspacesModalEl?.classList.add('hidden');
+  }
+
+  async refreshWorkspaces() {
+    if (this.savedHosts.length === 0) {
+      this.savedHosts = (await this.apiGetHosts()) || [];
+    }
+
+    this.savedWorkspaces = (await this.apiGetWorkspaces()) || [];
+
+    const badge = document.getElementById('workspaces-count-badge');
+    if (badge) badge.textContent = this.savedWorkspaces.length.toString();
+
+    this.renderWorkspacesList();
+  }
+
+  renderWorkspacesList() {
+    const container = document.getElementById('workspaces-list');
+    const emptyEl = document.getElementById('workspaces-empty');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    const query = (this.workspacesSearchQuery || '').toLowerCase().trim();
+    const filtered = this.savedWorkspaces.filter(ws => {
+      if (!query) return true;
+      const nameMatch = (ws.name || '').toLowerCase().includes(query);
+      const descMatch = (ws.description || '').toLowerCase().includes(query);
+      const termMatch = Array.isArray(ws.terminals) && ws.terminals.some(t => (t.title || '').toLowerCase().includes(query));
+      return nameMatch || descMatch || termMatch;
+    });
+
+    if (filtered.length === 0) {
+      if (emptyEl) emptyEl.classList.remove('hidden');
+      return;
+    } else {
+      if (emptyEl) emptyEl.classList.add('hidden');
+    }
+
+    filtered.forEach(ws => {
+      const card = document.createElement('div');
+      card.className = 'workspace-card';
+
+      const colorStripe = document.createElement('div');
+      colorStripe.className = 'host-card-color-stripe';
+      colorStripe.style.backgroundColor = ws.color || '#8b5cf6';
+      card.appendChild(colorStripe);
+
+      const header = document.createElement('div');
+      header.className = 'host-card-header';
+
+      const titleGroup = document.createElement('div');
+      titleGroup.className = 'host-card-title-group';
+
+      const titleRow = document.createElement('div');
+      titleRow.style.display = 'flex';
+      titleRow.style.alignItems = 'center';
+      titleRow.style.gap = '8px';
+
+      const nameEl = document.createElement('span');
+      nameEl.className = 'host-name';
+      nameEl.textContent = ws.name;
+      titleRow.appendChild(nameEl);
+
+      const badges = document.createElement('div');
+      badges.className = 'host-badges';
+
+      const countBadge = document.createElement('span');
+      countBadge.className = 'badge-pill badge-ssh';
+      countBadge.textContent = `${ws.terminals.length} TERMINAIS`;
+      badges.appendChild(countBadge);
+
+      const layoutBadge = document.createElement('span');
+      layoutBadge.className = 'badge-pill badge-local';
+      layoutBadge.textContent = (ws.layout || 'auto').toUpperCase();
+      badges.appendChild(layoutBadge);
+
+      titleRow.appendChild(badges);
+      titleGroup.appendChild(titleRow);
+
+      if (ws.description) {
+        const descEl = document.createElement('span');
+        descEl.className = 'workspace-desc';
+        descEl.textContent = ws.description;
+        titleGroup.appendChild(descEl);
+      }
+
+      header.appendChild(titleGroup);
+      card.appendChild(header);
+
+      // Preview dos terminais configurados no workspace
+      if (Array.isArray(ws.terminals) && ws.terminals.length > 0) {
+        const previewBox = document.createElement('div');
+        previewBox.className = 'workspace-terminals-preview';
+
+        ws.terminals.forEach((term, idx) => {
+          const item = document.createElement('div');
+          item.className = 'preview-term-item';
+
+          const left = document.createElement('div');
+          left.className = 'preview-term-left';
+
+          const num = document.createElement('span');
+          num.className = 'workspace-term-index';
+          num.textContent = `#${idx + 1}`;
+          left.appendChild(num);
+
+          const termTitle = document.createElement('span');
+          termTitle.style.fontWeight = '500';
+          termTitle.textContent = term.title || 'Terminal';
+          left.appendChild(termTitle);
+
+          item.appendChild(left);
+
+          const meta = document.createElement('div');
+          meta.className = 'preview-term-meta';
+
+          if (term.type === 'host' && term.host_id) {
+            const h = this.savedHosts.find(host => host.id === term.host_id);
+            meta.textContent = `SSH: ${h ? h.name : 'Host'}`;
+          } else {
+            const pathInfo = term.cwd ? term.cwd : '';
+            const cmdInfo = term.startup_command ? `⚡ ${term.startup_command}` : '';
+            meta.textContent = [pathInfo, cmdInfo].filter(Boolean).join(' • ') || 'Shell Padrão';
+          }
+
+          item.appendChild(meta);
+          previewBox.appendChild(item);
+        });
+
+        card.appendChild(previewBox);
+      }
+
+      // Rodapé: Ações
+      const actions = document.createElement('div');
+      actions.className = 'host-card-actions';
+
+      const btnLaunch = document.createElement('button');
+      btnLaunch.className = 'btn-launch-workspace';
+      btnLaunch.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+        <span>Abrir Workspace</span>
+      `;
+      btnLaunch.addEventListener('click', () => this.launchWorkspace(ws));
+      actions.appendChild(btnLaunch);
+
+      const iconActions = document.createElement('div');
+      iconActions.className = 'card-action-icons';
+
+      const btnEdit = document.createElement('button');
+      btnEdit.className = 'btn-icon-action';
+      btnEdit.title = 'Editar Workspace';
+      btnEdit.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+      `;
+      btnEdit.addEventListener('click', () => this.openWorkspaceForm(ws));
+      iconActions.appendChild(btnEdit);
+
+      const btnDelete = document.createElement('button');
+      btnDelete.className = 'btn-icon-action btn-icon-delete';
+      btnDelete.title = 'Excluir Workspace';
+      btnDelete.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      `;
+      btnDelete.addEventListener('click', async () => {
+        if (confirm(`Deseja realmente excluir o workspace "${ws.name}"?`)) {
+          await this.apiDeleteWorkspace(ws.id);
+          await this.refreshWorkspaces();
+        }
+      });
+      iconActions.appendChild(btnDelete);
+
+      actions.appendChild(iconActions);
+      card.appendChild(actions);
+
+      container.appendChild(card);
+    });
+  }
+
+  openSaveCurrentSessionModal() {
+    if (this.terminals.size === 0) {
+      alert('Abra ao menos um terminal antes de salvar a sessão como workspace.');
+      return;
+    }
+
+    const currentTerms = [];
+    for (const [id, inst] of this.terminals) {
+      currentTerms.push({
+        title: inst.title || 'Terminal',
+        type: inst.hostId ? 'host' : 'local',
+        host_id: inst.hostId || null,
+        cwd: inst.cwd || '',
+        startup_command: inst.startupCommand || ''
+      });
+    }
+
+    const now = new Date();
+    const defaultName = `Sessão ${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+
+    this.openWorkspaceForm({
+      name: defaultName,
+      layout: this.currentLayout || 'auto',
+      color: '#8b5cf6',
+      description: `Workspace com ${currentTerms.length} terminais ativos`,
+      terminals: currentTerms
+    });
+  }
+
+  async openWorkspaceForm(workspace = null) {
+    if (this.savedHosts.length === 0) {
+      this.savedHosts = (await this.apiGetHosts()) || [];
+    }
+
+    const titleEl = document.getElementById('workspace-form-title');
+    const idInput = document.getElementById('workspace-input-id');
+    const nameInput = document.getElementById('workspace-input-name');
+    const layoutSelect = document.getElementById('workspace-input-layout');
+    const colorSelect = document.getElementById('workspace-input-color');
+    const descInput = document.getElementById('workspace-input-description');
+    const terminalsListEl = document.getElementById('workspace-terminals-list');
+
+    if (!terminalsListEl) return;
+    terminalsListEl.innerHTML = '';
+
+    if (workspace) {
+      if (titleEl) titleEl.textContent = workspace.id ? 'Editar Workspace' : 'Salvar Sessão como Workspace';
+      if (idInput) idInput.value = workspace.id || '';
+      if (nameInput) nameInput.value = workspace.name || '';
+      if (layoutSelect) layoutSelect.value = workspace.layout || 'auto';
+      if (colorSelect) colorSelect.value = workspace.color || '#8b5cf6';
+      if (descInput) descInput.value = workspace.description || '';
+
+      if (Array.isArray(workspace.terminals) && workspace.terminals.length > 0) {
+        workspace.terminals.forEach(term => this.addWorkspaceTerminalRow(term));
+      } else {
+        this.addWorkspaceTerminalRow();
+      }
+    } else {
+      if (titleEl) titleEl.textContent = 'Novo Workspace';
+      if (idInput) idInput.value = '';
+      if (nameInput) nameInput.value = '';
+      if (layoutSelect) layoutSelect.value = 'auto';
+      if (colorSelect) colorSelect.value = '#8b5cf6';
+      if (descInput) descInput.value = '';
+      this.addWorkspaceTerminalRow();
+    }
+
+    this.updateWorkspaceTerminalsCount();
+    this.workspaceFormModalEl?.classList.remove('hidden');
+    nameInput?.focus();
+  }
+
+  closeWorkspaceForm() {
+    this.workspaceFormModalEl?.classList.add('hidden');
+  }
+
+  addWorkspaceTerminalRow(data = null) {
+    const listEl = document.getElementById('workspace-terminals-list');
+    if (!listEl) return;
+
+    const row = document.createElement('div');
+    row.className = 'workspace-term-row';
+
+    const index = listEl.children.length + 1;
+
+    row.innerHTML = `
+      <div class="workspace-term-row-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="workspace-term-index">#${index}</span>
+          <input type="text" class="term-row-title" placeholder="Nome do Terminal (ex: Backend, Frontend, Logs)" value="${this.escapeHtml(data?.title || `Terminal #${index}`)}" style="width: 240px; padding: 6px 10px; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-main); font-size: 0.8rem;">
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <select class="term-row-type select-filter" style="padding: 5px 8px; font-size: 0.78rem;">
+            <option value="local" ${(data?.type || 'local') === 'local' ? 'selected' : ''}>Terminal Local</option>
+            <option value="host" ${(data?.type || '') === 'host' ? 'selected' : ''}>Host SSH Remoto</option>
+          </select>
+          <button type="button" class="btn-remove-term-row" title="Remover este terminal">✕</button>
+        </div>
+      </div>
+
+      <div class="term-row-local-fields" style="display: ${(data?.type || 'local') === 'local' ? 'flex' : 'none'}; gap: 10px;">
+        <div style="flex: 1;">
+          <input type="text" class="term-row-cwd" placeholder="Diretório (ex: ~/Projetos/app)" value="${this.escapeHtml(data?.cwd || '')}" style="width: 100%; padding: 6px 10px; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-main); font-size: 0.78rem;">
+        </div>
+        <div style="flex: 1;">
+          <input type="text" class="term-row-cmd" placeholder="Comando Inicial (ex: npm run dev)" value="${this.escapeHtml(data?.startup_command || '')}" style="width: 100%; padding: 6px 10px; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-main); font-size: 0.78rem;">
+        </div>
+      </div>
+
+      <div class="term-row-host-fields" style="display: ${(data?.type || '') === 'host' ? 'block' : 'none'};">
+        <select class="term-row-host select-filter" style="width: 100%; padding: 6px 10px; font-size: 0.78rem;">
+          <option value="">Selecione um Host cadastrado...</option>
+          ${this.savedHosts.map(h => `<option value="${h.id}" ${data?.host_id === h.id ? 'selected' : ''}>${this.escapeHtml(h.name)} (${h.host_type === 'ssh' ? h.hostname : 'Local'})</option>`).join('')}
+        </select>
+      </div>
+    `;
+
+    // Alternar campos conforme o tipo selecionado
+    const typeSelect = row.querySelector('.term-row-type');
+    const localFields = row.querySelector('.term-row-local-fields');
+    const hostFields = row.querySelector('.term-row-host-fields');
+
+    typeSelect?.addEventListener('change', (e) => {
+      if (e.target.value === 'host') {
+        localFields.style.display = 'none';
+        hostFields.style.display = 'block';
+      } else {
+        localFields.style.display = 'flex';
+        hostFields.style.display = 'none';
+      }
+    });
+
+    // Botão remover
+    row.querySelector('.btn-remove-term-row')?.addEventListener('click', () => {
+      row.remove();
+      this.reindexWorkspaceTerminalRows();
+      this.updateWorkspaceTerminalsCount();
+    });
+
+    listEl.appendChild(row);
+    this.updateWorkspaceTerminalsCount();
+  }
+
+  reindexWorkspaceTerminalRows() {
+    const listEl = document.getElementById('workspace-terminals-list');
+    if (!listEl) return;
+    Array.from(listEl.children).forEach((row, idx) => {
+      const idxSpan = row.querySelector('.workspace-term-index');
+      if (idxSpan) idxSpan.textContent = `#${idx + 1}`;
+    });
+  }
+
+  updateWorkspaceTerminalsCount() {
+    const listEl = document.getElementById('workspace-terminals-list');
+    const countEl = document.getElementById('workspace-terminals-count');
+    if (countEl && listEl) {
+      countEl.textContent = listEl.children.length.toString();
+    }
+  }
+
+  async launchWorkspace(workspace) {
+    if (!workspace || !Array.isArray(workspace.terminals) || workspace.terminals.length === 0) {
+      alert('Este workspace não possui terminais configurados.');
+      return;
+    }
+
+    // Fecha o modal de workspaces
+    this.closeWorkspacesModal();
+
+    // Se já existirem terminais abertos, pergunta se o usuário deseja limpar a tela ou manter
+    if (this.terminals.size > 0) {
+      const confirmReplace = confirm(
+        `Existem ${this.terminals.size} terminais abertos.\n\n` +
+        `Clique em "OK" para fechar os atuais e abrir o workspace "${workspace.name}" do zero.\n` +
+        `Clique em "Cancelar" para abrir os novos terminais lado a lado com os atuais.`
+      );
+
+      if (confirmReplace) {
+        const currentIds = Array.from(this.terminals.keys());
+        for (const id of currentIds) {
+          this.removeTerminal(id);
+        }
+      }
+    }
+
+    // Aplica o layout salvo no workspace
+    this.setLayout(workspace.layout || 'auto');
+
+    // Abre cada terminal do workspace sequencialmente com delay suave
+    workspace.terminals.forEach((term, index) => {
+      setTimeout(() => {
+        if (term.type === 'host' && term.host_id) {
+          const host = this.savedHosts.find(h => h.id === term.host_id);
+          if (host) {
+            this.connectToHost(host);
+          } else {
+            const fallbackInstance = this.createNewTerminal(term.title || 'Terminal');
+            fallbackInstance.term?.writeln(`\r\n\x1b[33m[Aviso: O host configurado neste workspace não foi encontrado no banco]\x1b[0m\r\n`);
+          }
+        } else {
+          // Terminal Local
+          const termId = `term-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+          const defaultTitle = term.title || `Terminal #${this.terminalCounter++}`;
+
+          const instance = new TerminalInstance(this, termId, defaultTitle);
+          instance.cwd = term.cwd || '';
+          instance.startupCommand = term.startup_command || '';
+
+          this.terminals.set(termId, instance);
+          this.updateGridState();
+          this.setActiveTerminal(termId);
+
+          const payload = {
+            id: termId,
+            title: defaultTitle,
+            cwd: term.cwd || undefined,
+            startupCommand: term.startup_command || undefined,
+            cols: instance.term.cols || 80,
+            rows: instance.term.rows || 24
+          };
+
+          if (this.isElectron) {
+            window.termix.createTerminal(payload);
+          } else if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ action: 'create', ...payload }));
+          }
+        }
+      }, index * 120);
+    });
+  }
 }
 
 /**
@@ -1353,6 +1927,10 @@ class TerminalInstance {
     this.pid = null;
     this.shell = 'zsh';
     this.isMaximized = false;
+    this.hostId = null;
+    this.hostName = null;
+    this.cwd = '';
+    this.startupCommand = '';
 
     this.createDom();
     this.initXterm();

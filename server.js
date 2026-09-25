@@ -97,6 +97,30 @@ app.delete('/api/identities/:id', (req, res) => {
   res.json(db.deleteIdentity(req.params.id));
 });
 
+// Rotas da API para Workspaces
+app.get('/api/workspaces', (req, res) => {
+  res.json(db.getWorkspaces());
+});
+
+app.get('/api/workspaces/:id', (req, res) => {
+  const wsItem = db.getWorkspace(req.params.id);
+  if (!wsItem) return res.status(404).json({ error: 'Workspace não encontrado' });
+  res.json(wsItem);
+});
+
+app.post('/api/workspaces', (req, res) => {
+  try {
+    const saved = db.saveWorkspace(req.body);
+    res.json(saved);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/workspaces/:id', (req, res) => {
+  res.json(db.deleteWorkspace(req.params.id));
+});
+
 /**
  * Cria uma nova instância de terminal pseudoterminal (node-pty)
  */

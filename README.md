@@ -26,6 +26,10 @@ Diferente de alternativas baseadas puramente em navegadores web locais que prend
 ## ✨ Principais Funcionalidades
 
 - **⚡ Pseudoterminais Reais (node-pty):** Criação de instâncias nativas do seu shell padrão (`/bin/zsh`, `bash`, `fish`) com suporte total a PTY, cores ANSI 256/Truecolor e interatividade com programas como `htop`, `vim`, `ssh` e `docker`.
+- **🗂️ Workspaces & Sessões Salvas (Novo!):**
+  - Salve o conjunto atual de terminais abertos (ex: 4 terminais com diretórios específicos, comandos de inicialização, títulos e hosts SSH conectados) como um **Workspace** reutilizável.
+  - Botão rápido **"Salvar Sessão Atual"** para capturar tudo o que está em execução no momento.
+  - Ao clicar em **"Abrir Workspace"** (<kbd>⌥</kbd> + <kbd>W</kbd>), o Termix restaura todos os terminais do grupo, reconecta aos respectivos hosts/diretórios e reaplica o layout configurado.
 - **🌐 Gerenciador de Hosts e Identidades (Estilo Termius):**
   - Cadastro organizado de **Hosts SSH remotos** e **Sessões Locais**.
   - **Diretório Padrão (*Default Path*):** Abertura automática da sessão navegando diretamente para a pasta do seu projeto ou repositório.
@@ -40,7 +44,7 @@ Diferente de alternativas baseadas puramente em navegadores web locais que prend
   - <kbd>⌘</kbd> + <kbd>A</kbd> para selecionar todo o buffer do terminal.
   - <kbd>⌘</kbd> + <kbd>K</kbd> para limpar o terminal (comportamento padrão do macOS / iTerm2).
   - Menu de contexto nativo via botão direito (Copiar, Colar, Selecionar Tudo).
-- **🎨 Design System Elegante & Temas:** Interface inspirada nos padrões de design do macOS (traffic lights nativos, glassmorphism e tipografia técnica com `JetBrains Mono`). Suporte a alternância rápida de temas Claro e Escuro (<kbd>⌘</kbd> + <kbd>J</kbd>).
+- **🎨 Design System Elegante & Temas:** Interface inspirada nos padrões de design do macOS (traffic lights nativos, glassmorphism e tipografia técnica com `JetBrains Mono`). Suporte a alternância rápida de temas Claro e Escuro (<kbd>⌘</kbd> + <kbd>J</kbd> ou <kbd>⌥</kbd> + <kbd>J</kbd>).
 - **🔍 Maximização Individual de Bloco:** Aumente o foco em qualquer terminal específico (<kbd>⌥</kbd> + <kbd>M</kbd>) e retorne ao mosaico sem perder o estado da sessão.
 - **✏️ Títulos Customizáveis:** Dê duplo-clique no cabeçalho de qualquer terminal para renomeá-lo de acordo com o serviço ou host conectado.
 
@@ -142,6 +146,7 @@ Os artefatos gerados são salvos no diretório `dist/`:
 | <kbd>⌘</kbd> + <kbd>A</kbd> | **Selecionar tudo** no buffer do terminal ativo |
 | <kbd>⌘</kbd> + <kbd>K</kbd> ou <kbd>⌃</kbd> + <kbd>L</kbd> | **Limpar** o buffer de saída do terminal |
 | <kbd>⌘</kbd> + <kbd>T</kbd> ou <kbd>⌥</kbd> + <kbd>T</kbd> | Abrir uma nova sessão de terminal |
+| <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>W</kbd> ou <kbd>⌥</kbd> + <kbd>W</kbd> | Abrir o **Gerenciador de Workspaces** (Sessões Salvas) |
 | <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>H</kbd> ou <kbd>⌥</kbd> + <kbd>H</kbd> | Abrir o **Gerenciador de Hosts e Identidades** |
 | <kbd>⌘</kbd> + <kbd>B</kbd> ou <kbd>⌥</kbd> + <kbd>B</kbd> | Abrir ou fechar a barra de comando **Broadcast** |
 | <kbd>⌘</kbd> + <kbd>J</kbd> ou <kbd>⌥</kbd> + <kbd>J</kbd> | Alternar entre tema **Claro** e **Escuro** |

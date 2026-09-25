@@ -87,6 +87,17 @@
 
       <!-- Ações Direitas -->
       <div class="navbar-right">
+        <!-- Botão Workspaces (Conjuntos de Terminais Salvos) -->
+        <button id="btn-open-workspaces" class="btn-action btn-secondary" title="Workspaces Salvos (Atalho: Alt + W ou Cmd + Shift + W)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          <span>Workspaces</span>
+        </button>
+
         <!-- Botão Gerenciador de Hosts e Identidades (Estilo Termius) -->
         <button id="btn-open-hosts" class="btn-action btn-secondary" title="Gerenciador de Hosts e Identidades (Estilo Termius)">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -185,6 +196,15 @@
           <p>Inicie instâncias independentes de shell integradas diretamente ao seu sistema operacional.</p>
           
           <div class="empty-quick-actions">
+            <button class="btn-quick-start btn-quick-workspace" id="btn-quick-workspaces">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+              Workspaces
+            </button>
             <button class="btn-quick-start btn-quick-host" id="btn-start-host">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
                 <rect x="2" y="2" width="20" height="8" rx="2"></rect>
@@ -207,6 +227,8 @@
 
           <div class="empty-tips">
             <span class="tip-pill"><kbd>Alt</kbd> + <kbd>T</kbd> Novo Terminal</span>
+            <span class="tip-pill"><kbd>Alt</kbd> + <kbd>W</kbd> Workspaces</span>
+            <span class="tip-pill"><kbd>Alt</kbd> + <kbd>H</kbd> Hosts</span>
             <span class="tip-pill"><kbd>Alt</kbd> + <kbd>B</kbd> Broadcast</span>
           </div>
         </div>
@@ -244,7 +266,7 @@
               <div class="about-title-block">
                 <div class="about-title-row">
                   <span class="about-app-name">Termix</span>
-                  <span class="about-version-badge">v1.1.0</span>
+                  <span class="about-version-badge">v1.2.0</span>
                 </div>
                 <p class="about-app-desc">Multi-Terminal Dashboard Desktop App para macOS</p>
               </div>
@@ -284,6 +306,14 @@
             <div class="shortcut-row">
               <span class="shortcut-desc">Alternar Barra de Broadcast</span>
               <span class="shortcut-keys"><kbd>⌘</kbd> + <kbd>B</kbd> ou <kbd>Alt</kbd> + <kbd>B</kbd></span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Gerenciador de Workspaces</span>
+              <span class="shortcut-keys"><kbd>Alt</kbd> + <kbd>W</kbd> ou <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>W</kbd></span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Gerenciador de Hosts SSH</span>
+              <span class="shortcut-keys"><kbd>Alt</kbd> + <kbd>H</kbd> ou <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>H</kbd></span>
             </div>
             <div class="shortcut-row">
               <span class="shortcut-desc">Maximizar / Restaurar Terminal</span>
@@ -528,6 +558,131 @@
           <div class="form-actions">
             <button type="button" class="btn-action btn-secondary" id="btn-cancel-identity-form">Cancelar</button>
             <button type="submit" class="btn-action btn-primary" id="btn-save-identity">Salvar Identidade</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal Principal: Gerenciador de Workspaces (Conjuntos de Terminais Salvos) -->
+    <div id="workspaces-modal" class="modal-backdrop hidden">
+      <div class="modal-card modal-card-large">
+        <div class="modal-header">
+          <div class="modal-title-with-badge">
+            <div class="brand-logo-icon" style="width: 28px; height: 28px; border-radius: 6px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+            </div>
+            <div>
+              <h3>Workspaces</h3>
+              <p class="modal-subtitle">Abra conjuntos inteiros de terminais com um único clique</p>
+            </div>
+            <span class="tab-badge" id="workspaces-count-badge">0</span>
+          </div>
+          <button class="btn-modal-close" id="btn-close-workspaces-modal">✕</button>
+        </div>
+
+        <div class="modal-body hosts-modal-body">
+          <div class="hosts-toolbar">
+            <div class="search-input-wrap">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input type="text" id="workspaces-search-input" placeholder="Buscar workspace..." autocomplete="off">
+            </div>
+
+            <div class="toolbar-actions">
+              <button id="btn-save-current-session" class="btn-action btn-secondary" title="Salvar os terminais abertos atualmente como um novo workspace">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                  <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                  <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+                <span>Salvar Sessão Atual</span>
+              </button>
+              <button id="btn-add-workspace" class="btn-action btn-primary">
+                <span>+</span> Novo Workspace
+              </button>
+            </div>
+          </div>
+
+          <!-- Lista de Workspaces -->
+          <div id="workspaces-list" class="hosts-cards-grid">
+            <!-- Injetado dinamicamente via JS -->
+          </div>
+
+          <div id="workspaces-empty" class="hosts-empty-view hidden">
+            <p>Nenhum workspace cadastrado. Abra seus terminais favoritos e clique em <strong>Salvar Sessão Atual</strong>!</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Formulário: Criar / Editar Workspace -->
+    <div id="workspace-form-modal" class="modal-backdrop hidden">
+      <div class="modal-card modal-card-large">
+        <div class="modal-header">
+          <h3 id="workspace-form-title">Configurar Workspace</h3>
+          <button class="btn-modal-close" id="btn-close-workspace-form">✕</button>
+        </div>
+        <form id="form-workspace" class="modal-body form-body">
+          <input type="hidden" id="workspace-input-id">
+
+          <div class="form-row">
+            <div class="form-group flex-2">
+              <label for="workspace-input-name">Nome do Workspace *</label>
+              <input type="text" id="workspace-input-name" required placeholder="Ex: Projeto Soffia, Stack Fullstack, Monitoramento">
+            </div>
+
+            <div class="form-group flex-1">
+              <label for="workspace-input-layout">Layout ao Abrir</label>
+              <select id="workspace-input-layout">
+                <option value="auto">Mosaico Automático (Auto)</option>
+                <option value="1col">1 Coluna (Foco)</option>
+                <option value="2col">2 Colunas (Lado a Lado)</option>
+                <option value="3col">3 Colunas</option>
+              </select>
+            </div>
+
+            <div class="form-group" style="width: 150px;">
+              <label for="workspace-input-color">Cor da Tag</label>
+              <select id="workspace-input-color">
+                <option value="#8b5cf6">Roxo Violeta</option>
+                <option value="#3b82f6">Azul Safira</option>
+                <option value="#10b981">Verde Esmeralda</option>
+                <option value="#f59e0b">Âmbar Ouro</option>
+                <option value="#ec4899">Rosa Choque</option>
+                <option value="#06b6d4">Ciano Turquesa</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="workspace-input-description">Descrição (Opcional)</label>
+            <input type="text" id="workspace-input-description" placeholder="Ex: Backend Node.js, Frontend React, Docker Compose e logs">
+          </div>
+
+          <!-- Seção de Terminais do Workspace -->
+          <div class="form-group">
+            <div class="workspace-terminals-header">
+              <label>Terminais deste Workspace (<span id="workspace-terminals-count">0</span>)</label>
+              <button type="button" class="btn-action btn-secondary btn-sm" id="btn-add-terminal-row">
+                <span>+</span> Adicionar Terminal
+              </button>
+            </div>
+            
+            <div id="workspace-terminals-list" class="workspace-terminals-list">
+              <!-- Linhas de terminais injetadas dinamicamente -->
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="btn-action btn-secondary" id="btn-cancel-workspace-form">Cancelar</button>
+            <button type="submit" class="btn-action btn-primary" id="btn-save-workspace">Salvar Workspace</button>
           </div>
         </form>
       </div>

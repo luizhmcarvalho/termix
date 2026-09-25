@@ -539,6 +539,23 @@ ipcMain.handle('db:identities:delete', (event, id) => {
   return getDatabase().deleteIdentity(id);
 });
 
+// IPC: Gerenciador de Workspaces (Conjuntos de Terminais)
+ipcMain.handle('db:workspaces:list', () => {
+  return getDatabase().getWorkspaces();
+});
+
+ipcMain.handle('db:workspaces:get', (event, id) => {
+  return getDatabase().getWorkspace(id);
+});
+
+ipcMain.handle('db:workspaces:save', (event, data) => {
+  return getDatabase().saveWorkspace(data);
+});
+
+ipcMain.handle('db:workspaces:delete', (event, id) => {
+  return getDatabase().deleteWorkspace(id);
+});
+
 // Ciclo de vida do Electron
 app.whenReady().then(() => {
   createWindow();

@@ -54,8 +54,20 @@ class DatabaseManager {
         FOREIGN KEY (identity_id) REFERENCES identities(id) ON DELETE SET NULL
       );
 
+      CREATE TABLE IF NOT EXISTS workspaces (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        layout TEXT NOT NULL DEFAULT 'auto',
+        color TEXT DEFAULT '#8b5cf6',
+        description TEXT,
+        terminals_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_hosts_name ON hosts(name);
       CREATE INDEX IF NOT EXISTS idx_identities_name ON identities(name);
+      CREATE INDEX IF NOT EXISTS idx_workspaces_name ON workspaces(name);
     `);
   }
 
@@ -269,6 +281,88 @@ class DatabaseManager {
 
   deleteHost(id) {
     const stmt = this.db.prepare('DELETE FROM hosts WHERE id = ?');
+    stmt.run(id);
+    return { success: true, id };
+  }
+
+  // --- WORKSPACES (Conjunto de Terminais Salvos) ---
+
+  getWorkspaces() {
+    const stmt = this.db.prepare('SELECT * FROM workspaces ORDER BY name ASC');
+    return stmt.all().map(row => {
+      let terminals = [];
+      try {
+        terminals = JSON.parse(row.terminals_json || '[]');
+      } catch (e) {
+        terminals = [];
+      }
+      return {
+        ...row,
+        terminals
+      };
+    });
+  }
+
+  getWorkspace(id) {
+    const stmt = this.db.prepare('SELECT * FROM workspaces WHERE id = ?');
+    const row = stmt.get(id);
+    if (!row) return null;
+    let terminals = [];
+    try {
+      terminals = JSON.parse(row.terminals_json || '[]');
+    } catch (e) {
+      terminals = [];
+    }
+    return {
+      ...row,
+      terminals
+    };
+  }
+
+  saveWorkspace(data) {
+    const now = new Date().toISOString();
+    let id = data.id;
+
+    const terminalsJson = JSON.stringify(data.terminals || []);
+
+    if (!id) {
+      id = `ws-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const stmt = this.db.prepare(`
+        INSERT INTO workspaces (id, name, layout, color, description, terminals_json, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      stmt.run(
+        id,
+        data.name || 'Novo Workspace',
+        data.layout || 'auto',
+        data.color || '#8b5cf6',
+        data.description || '',
+        terminalsJson,
+        now,
+        now
+      );
+    } else {
+      const stmt = this.db.prepare(`
+        UPDATE workspaces
+        SET name = ?, layout = ?, color = ?, description = ?, terminals_json = ?, updated_at = ?
+        WHERE id = ?
+      `);
+      stmt.run(
+        data.name || 'Workspace',
+        data.layout || 'auto',
+        data.color || '#8b5cf6',
+        data.description || '',
+        terminalsJson,
+        now,
+        id
+      );
+    }
+
+    return this.getWorkspace(id);
+  }
+
+  deleteWorkspace(id) {
+    const stmt = this.db.prepare('DELETE FROM workspaces WHERE id = ?');
     stmt.run(id);
     return { success: true, id };
   }

@@ -114,5 +114,12 @@ contextBridge.exposeInMainWorld('termix', {
     get: (id) => ipcRenderer.invoke('db:identities:get', id),
     save: (data) => ipcRenderer.invoke('db:identities:save', data),
     delete: (id) => ipcRenderer.invoke('db:identities:delete', id)
+  },
+
+  workspaces: {
+    list: () => ipcRenderer.invoke('db:workspaces:list'),
+    get: (id) => ipcRenderer.invoke('db:workspaces:get', id),
+    save: (data) => ipcRenderer.invoke('db:workspaces:save', data),
+    delete: (id) => ipcRenderer.invoke('db:workspaces:delete', id)
   }
 });
