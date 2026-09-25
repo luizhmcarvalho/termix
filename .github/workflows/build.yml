@@ -37,10 +37,6 @@ jobs:
           node-version: 22
           cache: 'npm'
 
-      - name: Configurar Visual Studio 2022 no Windows
-        if: runner.os == 'Windows'
-        run: npm config set msvs_version 2022
-
       - name: Instalar dependências no Linux (se aplicável)
         if: runner.os == 'Linux'
         run: |
