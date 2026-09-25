@@ -164,8 +164,8 @@ function setupMenu() {
   if (isMac) {
     app.setAboutPanelOptions({
       applicationName: 'Termix',
-      applicationVersion: '1.3.3',
-      version: '1.3.3',
+      applicationVersion: '1.4.0',
+      version: '1.4.0',
       copyright: 'Copyright © 2026 Luiz Carvalho',
       authors: ['Luiz Carvalho'],
       credits: 'Desenvolvido por Luiz Carvalho\nLicença: MIT'
