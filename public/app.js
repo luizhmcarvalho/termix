@@ -2124,7 +2124,11 @@ class TerminalInstance {
       letterSpacing: 0,
       fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Monaco, Consolas, monospace",
       allowProposedApi: true,
-      theme: activeXtermTheme
+      theme: activeXtermTheme,
+      scrollback: 15000,
+      scrollOnUserInput: true,
+      smoothScrollDuration: 0,
+      convertEol: true
     });
 
     const FitClass = (typeof FitAddon !== 'undefined' && FitAddon.FitAddon)
@@ -2145,6 +2149,22 @@ class TerminalInstance {
     }
 
     this.term.open(this.bodyEl);
+
+    // Garante que o helper textarea do xterm fique estritamente fora da tela e sem margem no topo
+    const helperTextarea = this.bodyEl.querySelector('.xterm-helper-textarea');
+    if (helperTextarea) {
+      helperTextarea.style.position = 'absolute';
+      helperTextarea.style.opacity = '0';
+      helperTextarea.style.left = '-99999px';
+      helperTextarea.style.top = '-99999px';
+      helperTextarea.style.width = '0px';
+      helperTextarea.style.height = '0px';
+      helperTextarea.style.margin = '0px';
+      helperTextarea.style.padding = '0px';
+      helperTextarea.style.border = 'none';
+      helperTextarea.style.outline = 'none';
+      helperTextarea.style.pointerEvents = 'none';
+    }
 
     // Gerenciador de atalhos de teclado (Cmd+C, Cmd+V, Cmd+A, Cmd+K)
     this.term.attachCustomKeyEventHandler((e) => {

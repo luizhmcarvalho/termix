@@ -11,17 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
-  <!-- xterm.js CSS (Servido localmente pelo backend com fallback CDN) -->
-  <link rel="stylesheet" href="/vendor/@xterm/xterm/css/xterm.css" id="xterm-css-local">
-  <script>
-    // Fallback de contingência caso o link local não carregue
-    document.getElementById('xterm-css-local').onerror = function() {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css';
-      document.head.appendChild(link);
-    };
-  </script>
+  <!-- xterm.js CSS (Local com caminho relativo) -->
+  <link rel="stylesheet" href="vendor/xterm.css">
 
   <!-- Estilos Customizados do Termix -->
   <link rel="stylesheet" href="style.css">
@@ -705,13 +696,13 @@
     </div>
   </div>
 
-  <!-- Scripts xterm.js (Local com fallback CDN automático) -->
-  <script src="/vendor/@xterm/xterm/lib/xterm.js"></script>
-  <script src="/vendor/@xterm/addon-fit/lib/addon-fit.js"></script>
-  <script src="/vendor/@xterm/addon-web-links/lib/addon-web-links.js"></script>
+  <!-- Scripts xterm.js (Local, 100% offline com caminhos relativos) -->
+  <script src="vendor/xterm.js"></script>
+  <script src="vendor/addon-fit.js"></script>
+  <script src="vendor/addon-web-links.js"></script>
   
   <script>
-    // Se por qualquer razão os scripts locais falharem, carrega via CDN instantaneamente
+    // Fallback de segurança caso os scripts locais falhem
     if (typeof Terminal === 'undefined') {
       console.warn('[Termix] Carregando xterm.js via fallback CDN...');
       document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"><\/script>');
