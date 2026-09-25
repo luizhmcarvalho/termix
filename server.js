@@ -367,8 +367,8 @@ function connectHostSession(ws, hostId, options = {}) {
   if (host.default_path || host.startup_command) {
     const cdPart = host.default_path ? `if cd "${host.default_path.replace(/"/g, '\\"')}" 2>/dev/null; then :; fi; ` : '';
     const cmdPart = host.startup_command ? `${host.startup_command}; ` : '';
-    // Garante inicialização interativa e login (-l -i) para carregar o .bashrc/.zshrc e exporta PS1 fallback para sempre exibir o prompt com o path
-    const remoteCommand = `${cdPart}${cmdPart}[ -z "$PS1" ] && export PS1='\\u@\\h:\\w\\$ '; exec "\${SHELL:-/bin/bash}" -l -i 2>/dev/null || exec /bin/sh -i`;
+    // Garante inicialização interativa e login (-l -i) sem suprimir stderr (onde o readline/bash renderiza o prompt/path)
+    const remoteCommand = `${cdPart}${cmdPart}exec "\${SHELL:-bash}" -l -i || exec sh -i`;
     sshArgs.push(target, remoteCommand);
   } else {
     sshArgs.push(target);
