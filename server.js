@@ -15,8 +15,17 @@ const { WebSocketServer } = require('ws');
 const pty = require('node-pty');
 const DatabaseManager = require('./services/db');
 
-// Garante que o ambiente macOS carregue o PATH completo do usuário (Homebrew, Cargo, Local, etc.)
+// Identificação de plataforma
+const isMac = process.platform === 'darwin';
+const isWin = process.platform === 'win32';
+const isLinux = process.platform === 'linux';
+
+// Garante que o ambiente macOS e Linux carregue o PATH completo do usuário
 function fixUserPath() {
+  if (isWin) {
+    return;
+  }
+
   const defaultPaths = [
     '/opt/homebrew/bin',
     '/opt/homebrew/sbin',
@@ -32,7 +41,7 @@ function fixUserPath() {
   ];
 
   try {
-    const loginShell = process.env.SHELL || '/bin/zsh';
+    const loginShell = process.env.SHELL || (isMac ? '/bin/zsh' : '/bin/bash');
     const userPath = require('child_process')
       .execFileSync(loginShell, ['-ilc', 'echo -n "$PATH"'], {
         encoding: 'utf8',
@@ -62,9 +71,11 @@ fixUserPath();
 const PORT = process.env.PORT || 3333;
 const HOST = process.env.HOST || '127.0.0.1';
 
-// Detecta o shell padrão do sistema operacional (zsh como padrão moderno no macOS)
-const DEFAULT_SHELL = process.env.SHELL || '/bin/zsh';
-const DEFAULT_CWD = process.env.HOME || process.cwd();
+// Detecta o shell padrão de acordo com o sistema operacional
+const DEFAULT_SHELL = isWin
+  ? (process.env.COMSPEC || 'powershell.exe')
+  : (process.env.SHELL || (isMac ? '/bin/zsh' : '/bin/bash'));
+const DEFAULT_CWD = process.env.HOME || (isWin ? process.env.USERPROFILE : null) || process.cwd();
 
 const app = express();
 const server = http.createServer(app);
@@ -195,18 +206,22 @@ function createTerminalSession(ws, options = {}) {
       targetCwd = DEFAULT_CWD;
     }
 
-    // Configura variáveis de ambiente ideais para terminal 256 cores no macOS
     const env = {
       ...process.env,
       TERM: 'xterm-256color',
-      COLORTERM: 'truecolor',
-      LANG: process.env.LANG || 'en_US.UTF-8',
-      LC_ALL: process.env.LC_ALL || 'en_US.UTF-8'
+      COLORTERM: 'truecolor'
     };
+
+    if (!isWin) {
+      env.LANG = process.env.LANG || 'en_US.UTF-8';
+      env.LC_ALL = process.env.LC_ALL || 'en_US.UTF-8';
+    }
 
     const shellArgs = (args && args.length > 0)
       ? args
-      : (shell === DEFAULT_SHELL || shell.endsWith('/zsh') || shell.endsWith('/bash') || shell.endsWith('/sh') ? ['-l'] : []);
+      : (isWin
+          ? []
+          : (shell === DEFAULT_SHELL || shell.endsWith('/zsh') || shell.endsWith('/bash') || shell.endsWith('/sh') ? ['-l'] : []));
 
     const ptyProcess = pty.spawn(shell, shellArgs, {
       name: 'xterm-256color',

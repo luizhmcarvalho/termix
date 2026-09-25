@@ -108,11 +108,28 @@ html, body {
 }
 
 /* ==========================================================================
-   SUPORTE AO ELECTRON NO macOS (Frameless com Titlebar Arrastável)
+   SUPORTE AO ELECTRON MULTIPLATAFORMA (Frameless com Titlebar Arrastável)
    ========================================================================== */
 body.electron-app #top-navbar {
-  padding-left: 80px; /* Dá espaço para os botões nativos do macOS no canto superior esquerdo */
   -webkit-app-region: drag; /* Permite arrastar a janela clicando no cabeçalho */
+}
+
+/* No macOS: espaço no canto superior esquerdo para os botões nativos (traffic lights) */
+body.electron-app.platform-darwin #top-navbar,
+body.electron-app:not(.platform-win32):not(.platform-linux) #top-navbar {
+  padding-left: 80px;
+}
+
+/* No Windows: botões nativos de minimizar/maximizar/fechar ficam no canto superior direito */
+body.electron-app.platform-win32 #top-navbar {
+  padding-left: 14px;
+  padding-right: 140px;
+}
+
+/* No Linux: espaçamento uniforme padrão */
+body.electron-app.platform-linux #top-navbar {
+  padding-left: 14px;
+  padding-right: 14px;
 }
 
 body.electron-app .brand-logo-icon,

@@ -93,6 +93,8 @@ class TermixDashboard {
 
     if (this.isElectron) {
       document.body.classList.add('electron-app');
+      const platform = (window.termix && window.termix.platform) || 'darwin';
+      document.body.classList.add(`platform-${platform}`);
       this.initElectronBridge();
     } else {
       this.initWebSocket();
@@ -112,6 +114,10 @@ class TermixDashboard {
 
     // Carrega informações do sistema
     window.termix.getSystemInfo().then(info => {
+      if (info && info.platform) {
+        document.body.classList.remove('platform-darwin', 'platform-win32', 'platform-linux');
+        document.body.classList.add(`platform-${info.platform}`);
+      }
       if (this.systemInfoEl) {
         this.systemInfoEl.textContent = `${info.platform} (${info.defaultShell}) • ${info.hostname}`;
       }

@@ -13,8 +13,17 @@ const { app, BrowserWindow, ipcMain, Menu, clipboard } = require('electron');
 const pty = require('node-pty');
 const DatabaseManager = require('./services/db');
 
-// Garante que o ambiente macOS carregue o PATH completo do usuário (Homebrew, Cargo, Local, etc.)
+// Identificação da plataforma
+const isMac = process.platform === 'darwin';
+const isWin = process.platform === 'win32';
+const isLinux = process.platform === 'linux';
+
+// Garante que o ambiente macOS e Linux carregue o PATH completo do usuário
 function fixUserPath() {
+  if (isWin) {
+    return; // No Windows o PATH já é gerenciado pelo sistema operacional
+  }
+
   const defaultPaths = [
     '/opt/homebrew/bin',
     '/opt/homebrew/sbin',
@@ -30,7 +39,7 @@ function fixUserPath() {
   ];
 
   try {
-    const loginShell = process.env.SHELL || '/bin/zsh';
+    const loginShell = process.env.SHELL || (isMac ? '/bin/zsh' : '/bin/bash');
     const userPath = require('child_process')
       .execFileSync(loginShell, ['-ilc', 'echo -n "$PATH"'], {
         encoding: 'utf8',
@@ -57,9 +66,11 @@ function fixUserPath() {
 
 fixUserPath();
 
-// Configurações do shell no macOS
-const DEFAULT_SHELL = process.env.SHELL || '/bin/zsh';
-const DEFAULT_CWD = process.env.HOME || process.cwd();
+// Configurações do shell por plataforma (PowerShell/CMD no Windows, zsh no Mac, bash no Linux)
+const DEFAULT_SHELL = isWin
+  ? (process.env.COMSPEC || 'powershell.exe')
+  : (process.env.SHELL || (isMac ? '/bin/zsh' : '/bin/bash'));
+const DEFAULT_CWD = process.env.HOME || (isWin ? process.env.USERPROFILE : null) || process.cwd();
 
 // Instância do banco de dados SQLite local
 let dbInstance = null;
@@ -77,15 +88,13 @@ const terminals = new Map();
 let mainWindow = null;
 
 function createWindow() {
-  mainWindow = new BrowserWindow({
+  const windowOptions = {
     width: 1280,
     height: 840,
     minWidth: 700,
     minHeight: 450,
     backgroundColor: '#0a0b10',
     title: 'Termix',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 14 },
     show: false, // Evita flash visual antes de carregar
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -93,7 +102,26 @@ function createWindow() {
       contextIsolation: true,
       sandbox: false
     }
-  });
+  };
+
+  if (isMac) {
+    windowOptions.titleBarStyle = 'hiddenInset';
+    windowOptions.trafficLightPosition = { x: 14, y: 14 };
+  } else if (isWin) {
+    // No Windows, titleBarOverlay oferece visual moderno integrado com botões nativos
+    windowOptions.titleBarStyle = 'hidden';
+    windowOptions.titleBarOverlay = {
+      color: '#0a0b10',
+      symbolColor: '#94a3b8',
+      height: 42
+    };
+    windowOptions.icon = path.join(__dirname, 'build', 'icon.ico');
+  } else {
+    // Linux: define ícone da janela
+    windowOptions.icon = path.join(__dirname, 'build', 'icon.png');
+  }
+
+  mainWindow = new BrowserWindow(windowOptions);
 
   mainWindow.loadFile(path.join(__dirname, 'public', 'index.html'));
 
@@ -308,14 +336,19 @@ function createTerminalSession(options = {}) {
     const env = {
       ...process.env,
       TERM: 'xterm-256color',
-      COLORTERM: 'truecolor',
-      LANG: process.env.LANG || 'en_US.UTF-8',
-      LC_ALL: process.env.LC_ALL || 'en_US.UTF-8'
+      COLORTERM: 'truecolor'
     };
+
+    if (!isWin) {
+      env.LANG = process.env.LANG || 'en_US.UTF-8';
+      env.LC_ALL = process.env.LC_ALL || 'en_US.UTF-8';
+    }
 
     const shellArgs = (args && args.length > 0)
       ? args
-      : (shell === DEFAULT_SHELL || shell.endsWith('/zsh') || shell.endsWith('/bash') || shell.endsWith('/sh') ? ['-l'] : []);
+      : (isWin
+          ? []
+          : (shell === DEFAULT_SHELL || shell.endsWith('/zsh') || shell.endsWith('/bash') || shell.endsWith('/sh') ? ['-l'] : []));
 
     const ptyProcess = pty.spawn(shell, shellArgs, {
       name: 'xterm-256color',

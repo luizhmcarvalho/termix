@@ -2,17 +2,21 @@
   "name": "termix",
   "productName": "Termix",
   "version": "1.3.3",
-  "description": "Multi-Terminal Dashboard Desktop App para macOS com Electron, node-pty e xterm.js",
+  "description": "Multi-Terminal Dashboard Desktop App para macOS, Linux e Windows com Electron, node-pty e xterm.js",
   "main": "main.js",
   "scripts": {
     "postinstall": "electron-rebuild -f -w node-pty && node fix-permissions.js",
     "start": "electron .",
     "dev": "electron .",
     "rebuild": "electron-rebuild -f -w node-pty && node fix-permissions.js",
-    "dist": "electron-builder --mac",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
     "dist:arm": "electron-builder --mac --arm64",
     "dist:intel": "electron-builder --mac --x64",
     "dist:universal": "electron-builder --mac --universal",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "dist:all": "electron-builder -mwl",
     "web": "PORT=3333 node server.js"
   },
   "keywords": [
@@ -22,6 +26,9 @@
     "pty",
     "xterm",
     "macos",
+    "windows",
+    "linux",
+    "cross-platform",
     "devops"
   ],
   "author": "Luiz Carvalho",
@@ -87,6 +94,39 @@
           "path": "/Applications"
         }
       ]
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Termix"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Development;TerminalEmulator;",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "maintainer": "Luiz Carvalho"
     }
   }
 }

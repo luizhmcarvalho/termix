@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('termix', {
   isElectron: true,
+  platform: process.platform,
 
   // Solicita criação de novo terminal pseudoterminal
   createTerminal: (options) => {

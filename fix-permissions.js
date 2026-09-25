@@ -7,6 +7,9 @@ const fs = require('fs');
 const path = require('path');
 
 function ensureExecutablePermissions() {
+  if (process.platform !== 'darwin') {
+    return;
+  }
   const ptyDir = path.join(__dirname, 'node_modules', 'node-pty', 'prebuilds');
   if (!fs.existsSync(ptyDir)) {
     return;
