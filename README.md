@@ -121,8 +121,8 @@ npm run dist:universal
 ```
 
 Os artefatos gerados são salvos no diretório `dist/`:
-- **`Termix-1.0.0-arm64.dmg`**: Imagem de disco padrão para instalação fácil (arraste para `/Applications`).
-- **`Termix-1.0.0-arm64-mac.zip`**: Pacote comprimido portátil.
+- **`Termix-1.1.0-arm64.dmg`**: Imagem de disco padrão para instalação fácil (arraste para `/Applications`).
+- **`Termix-1.1.0-arm64-mac.zip`**: Pacote comprimido portátil.
 - **`dist/mac-arm64/Termix.app`**: Binário da aplicação pronto para execução direta.
 
 > **Nota sobre o macOS Gatekeeper:**  
