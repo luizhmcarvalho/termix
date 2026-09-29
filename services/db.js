@@ -487,64 +487,161 @@ class DatabaseManager {
   }
 
   getAIConfig(includeDecryptedKey = false) {
-    const raw = this.getSetting('ai_config') || {
-      provider: 'gemini',
-      model: 'gemini-2.5-flash',
-      apiKey_enc: '',
-      baseUrl: '',
-      redactSecrets: true,
-      autoSuggestOnExitError: true
-    };
+    const raw = this.getSetting('ai_config') || {};
+    const provider = raw.provider || 'gemini';
 
-    let decryptedKey = '';
-    if (raw.apiKey_enc) {
-      decryptedKey = this.crypto.decrypt(raw.apiKey_enc) || '';
+    // Suporte a armazenamento de chaves independentes por provedor
+    const keysEnc = { ...(raw.keys_enc || {}) };
+    if (raw.apiKey_enc && !keysEnc[provider]) {
+      keysEnc[provider] = raw.apiKey_enc;
     }
 
-    const hasKey = Boolean(decryptedKey);
-    let keyPreview = '';
-    if (hasKey) {
-      if (decryptedKey.length > 8) {
-        keyPreview = `${decryptedKey.substring(0, 4)}...${decryptedKey.substring(decryptedKey.length - 4)}`;
+    const savedModels = {
+      gemini: 'gemini-2.5-flash',
+      openai: 'gpt-4o-mini',
+      anthropic: 'claude-3-5-sonnet-20241022',
+      deepseek: 'deepseek-chat',
+      nvidia: 'meta/llama-3.3-70b-instruct',
+      bedrock: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      ollama: 'llama3.2',
+      custom: 'gpt-4o-mini',
+      ...(raw.models || {})
+    };
+
+    const savedRegions = {
+      bedrock: 'us-east-1',
+      ...(raw.regions || {})
+    };
+
+    const savedBaseUrls = {
+      ollama: 'http://localhost:11434/v1',
+      deepseek: 'https://api.deepseek.com',
+      nvidia: 'https://integrate.api.nvidia.com/v1',
+      openai: 'https://api.openai.com/v1',
+      ...(raw.baseUrls || {})
+    };
+
+    // Computa status de cada provedor para a interface
+    const knownProviders = ['gemini', 'openai', 'anthropic', 'deepseek', 'nvidia', 'bedrock', 'ollama', 'custom'];
+    const providersStatus = {};
+    const decryptedKeysMap = {};
+
+    for (const p of knownProviders) {
+      let dec = '';
+      if (keysEnc[p]) {
+        try {
+          dec = this.crypto.decrypt(keysEnc[p]) || '';
+        } catch (_) {}
+      }
+
+      if (includeDecryptedKey) {
+        decryptedKeysMap[p] = dec;
+      }
+
+      const hasKey = p === 'ollama' ? true : Boolean(dec);
+      let keyPreview = '';
+      if (p === 'ollama') {
+        keyPreview = 'Local / Offline';
+      } else if (hasKey) {
+        if (dec.length > 8) {
+          keyPreview = `${dec.substring(0, 4)}...${dec.substring(dec.length - 4)}`;
+        } else {
+          keyPreview = '••••••••';
+        }
+      }
+
+      providersStatus[p] = {
+        hasKey,
+        keyPreview,
+        model: savedModels[p] || '',
+        region: savedRegions[p] || (p === 'bedrock' ? 'us-east-1' : ''),
+        baseUrl: savedBaseUrls[p] || ''
+      };
+    }
+
+    const activeModel = raw.model || savedModels[provider] || 'gemini-2.5-flash';
+    const activeRegion = raw.region || savedRegions[provider] || (provider === 'bedrock' ? 'us-east-1' : '');
+    const activeBaseUrl = raw.baseUrl !== undefined ? raw.baseUrl : (savedBaseUrls[provider] || '');
+
+    const activeDecryptedKey = decryptedKeysMap[provider] || (keysEnc[provider] ? (this.crypto.decrypt(keysEnc[provider]) || '') : '');
+    const hasActiveKey = provider === 'ollama' ? true : Boolean(activeDecryptedKey);
+    let activeKeyPreview = '';
+    if (provider === 'ollama') {
+      activeKeyPreview = 'Local / Offline';
+    } else if (hasActiveKey) {
+      if (activeDecryptedKey.length > 8) {
+        activeKeyPreview = `${activeDecryptedKey.substring(0, 4)}...${activeDecryptedKey.substring(activeDecryptedKey.length - 4)}`;
       } else {
-        keyPreview = '••••••••';
+        activeKeyPreview = '••••••••';
       }
     }
 
     return {
-      provider: raw.provider || 'gemini',
-      model: raw.model || 'gemini-2.5-flash',
-      baseUrl: raw.baseUrl || '',
+      provider,
+      model: activeModel,
+      region: activeRegion,
+      baseUrl: activeBaseUrl,
       redactSecrets: raw.redactSecrets !== false,
       autoSuggestOnExitError: raw.autoSuggestOnExitError !== false,
-      hasKey,
-      keyPreview,
-      ...(includeDecryptedKey ? { apiKey: decryptedKey } : {})
+      hasKey: hasActiveKey,
+      keyPreview: activeKeyPreview,
+      providersStatus,
+      savedModels,
+      savedRegions,
+      savedBaseUrls,
+      ...(includeDecryptedKey ? { apiKey: activeDecryptedKey, keys_decrypted: decryptedKeysMap } : {})
     };
   }
 
   saveAIConfig(data = {}) {
     const current = this.getSetting('ai_config') || {};
-    let apiKeyEnc = current.apiKey_enc || '';
+    const provider = data.provider || current.provider || 'gemini';
 
-    // Se o usuário passou uma nova apiKey em texto claro
-    if (typeof data.apiKey === 'string') {
+    const keysEnc = { ...(current.keys_enc || {}) };
+    if (current.apiKey_enc && !keysEnc[current.provider || 'gemini']) {
+      keysEnc[current.provider || 'gemini'] = current.apiKey_enc;
+    }
+
+    // Se o usuário solicitou explicitamente a remoção da chave do provedor
+    if (data.clearKey === true) {
+      delete keysEnc[provider];
+    } else if (typeof data.apiKey === 'string') {
       const trimmed = data.apiKey.trim();
-      if (trimmed === '') {
-        apiKeyEnc = '';
-      } else if (!trimmed.includes('...')) {
-        // Criptografa chave com AES-256-GCM
-        apiKeyEnc = this.crypto.encrypt(trimmed);
+      // Não sobrescreve chave existente se o campo estiver vazio ou for placeholder mascarado
+      if (trimmed !== '' && !trimmed.includes('••••') && !trimmed.includes('...')) {
+        keysEnc[provider] = this.crypto.encrypt(trimmed);
       }
     }
 
+    const savedModels = { ...(current.models || {}) };
+    if (data.model) {
+      savedModels[provider] = data.model;
+    }
+
+    const savedRegions = { ...(current.regions || {}) };
+    if (data.region) {
+      savedRegions[provider] = data.region;
+    }
+
+    const savedBaseUrls = { ...(current.baseUrls || {}) };
+    if (typeof data.baseUrl === 'string') {
+      savedBaseUrls[provider] = data.baseUrl.trim();
+    }
+
+    const activeKeyEnc = keysEnc[provider] || '';
+
     const newConfig = {
-      provider: data.provider || current.provider || 'gemini',
-      model: data.model || current.model || 'gemini-2.5-flash',
-      baseUrl: typeof data.baseUrl === 'string' ? data.baseUrl.trim() : (current.baseUrl || ''),
+      provider,
+      model: data.model || savedModels[provider] || (provider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini'),
+      region: data.region || savedRegions[provider] || (provider === 'bedrock' ? 'us-east-1' : ''),
+      baseUrl: typeof data.baseUrl === 'string' ? data.baseUrl.trim() : (savedBaseUrls[provider] || ''),
       redactSecrets: data.redactSecrets !== undefined ? Boolean(data.redactSecrets) : (current.redactSecrets !== false),
       autoSuggestOnExitError: data.autoSuggestOnExitError !== undefined ? Boolean(data.autoSuggestOnExitError) : (current.autoSuggestOnExitError !== false),
-      apiKey_enc: apiKeyEnc
+      apiKey_enc: activeKeyEnc,
+      keys_enc: keysEnc,
+      models: savedModels,
+      regions: savedRegions,
+      baseUrls: savedBaseUrls
     };
 
     this.saveSetting('ai_config', newConfig);

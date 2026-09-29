@@ -134,7 +134,7 @@
         </button>
 
         <!-- Configurações de IA -->
-        <button id="btn-open-ai-settings" class="btn-topbar-icon" title="Configurações de IA (Google Gemini, OpenAI, Ollama)" type="button">
+        <button id="btn-open-ai-settings" class="btn-topbar-icon" title="Configurações de IA (Google Gemini, OpenAI, Anthropic, DeepSeek, NVIDIA, AWS Bedrock, Ollama)" type="button">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"></circle>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -1012,38 +1012,60 @@
               <label for="ai-select-provider">Provedor de IA *</label>
               <select id="ai-select-provider">
                 <option value="gemini" selected>Google Gemini (Recomendado - Ultra Rápido)</option>
-                <option value="ollama">Ollama / LM Studio (100% Local, Offline &amp; Seguro)</option>
-                <option value="openai">OpenAI (ChatGPT / GPT-4o)</option>
-                <option value="anthropic">Anthropic (Claude 3.5)</option>
+                <option value="openai">OpenAI (GPT-4o, GPT-4o-mini, o3-mini)</option>
+                <option value="anthropic">Anthropic Claude (Claude 3.5 Sonnet, Haiku)</option>
+                <option value="deepseek">DeepSeek (DeepSeek-V3, DeepSeek-R1)</option>
+                <option value="nvidia">NVIDIA NIM (Llama 3.3 70B, DeepSeek-R1)</option>
+                <option value="bedrock">AWS Bedrock (Claude 3.5, Amazon Nova)</option>
+                <option value="ollama">Ollama / LM Studio (100% Local, Offline)</option>
+                <option value="custom">Endpoint Customizado (OpenAI Compatível)</option>
               </select>
             </div>
 
             <div class="form-group flex-1">
-              <label for="ai-select-model">Modelo *</label>
-              <select id="ai-select-model">
-                <option value="gemini-2.5-flash">gemini-2.5-flash (Mais Recente e Rápido)</option>
-                <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-                <option value="gemini-1.5-pro">gemini-1.5-pro (Raciocínio Profundo)</option>
-              </select>
+              <label for="ai-input-model">
+                <span>Modelo *</span>
+                <span class="label-help">Digite qualquer modelo ou clique em uma sugestão</span>
+              </label>
+              <input type="text" id="ai-input-model" list="ai-model-datalist" placeholder="Ex: gemini-2.5-flash, gpt-4o, claude-3-5-sonnet..." autocomplete="off">
+              <datalist id="ai-model-datalist"></datalist>
+              <div id="ai-model-suggestions" class="ai-model-suggestions-pills" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px;"></div>
             </div>
+          </div>
+
+          <div class="form-group hidden" id="ai-region-group">
+            <label for="ai-select-region">Região AWS Bedrock (Region) *</label>
+            <select id="ai-select-region">
+              <option value="us-east-1" selected>us-east-1 (EUA - N. Virginia)</option>
+              <option value="us-west-2">us-west-2 (EUA - Oregon)</option>
+              <option value="eu-central-1">eu-central-1 (Europa - Frankfurt)</option>
+              <option value="eu-west-1">eu-west-1 (Europa - Irlanda)</option>
+              <option value="ap-southeast-1">ap-southeast-1 (Ásia - Singapura)</option>
+              <option value="ap-northeast-1">ap-northeast-1 (Ásia - Tóquio)</option>
+              <option value="sa-east-1">sa-east-1 (América do Sul - São Paulo)</option>
+            </select>
+            <span class="input-hint">Região onde os modelos do Amazon Bedrock estão habilitados na sua conta AWS.</span>
           </div>
 
           <div class="form-group" id="ai-apikey-group">
             <label for="ai-input-apikey">
-              Chave de API (API Key)
+              <span id="ai-key-label">Chave de API (API Key)</span>
               <span class="label-help" id="ai-key-help">Obtenha gratuitamente no Google AI Studio (aistudio.google.com)</span>
             </label>
             <div class="password-input-wrap">
               <input type="password" id="ai-input-apikey" placeholder="Cole sua chave aqui (salva com criptografia AES-256-GCM)..." autocomplete="off">
               <button type="button" class="btn-toggle-password" id="btn-toggle-ai-key" title="Ver / Ocultar">👁</button>
             </div>
-            <span class="input-hint" id="ai-key-preview-text">Nenhuma chave configurada.</span>
+            <div class="key-status-row" style="display: flex; align-items: center; justify-content: space-between; margin-top: 4px;">
+              <span class="input-hint" id="ai-key-preview-text">Nenhuma chave configurada.</span>
+              <button type="button" class="btn-text-danger hidden" id="btn-clear-ai-key" style="background: none; border: none; color: #ef4444; font-size: 0.76rem; cursor: pointer; text-decoration: underline;">Remover Chave</button>
+            </div>
           </div>
 
           <div class="form-group hidden" id="ai-baseurl-group">
-            <label for="ai-input-baseurl">Endpoint / URL Base (Ollama ou API Compatível)</label>
+            <label for="ai-input-baseurl">Endpoint / URL Base (Opcional ou Local)</label>
             <input type="text" id="ai-input-baseurl" placeholder="http://localhost:11434/v1">
-            <span class="input-hint">Padrão para Ollama local: http://localhost:11434/v1</span>
+            <span class="input-hint" id="ai-baseurl-hint">Padrão para Ollama local: http://localhost:11434/v1</span>
           </div>
 
           <div class="form-group">

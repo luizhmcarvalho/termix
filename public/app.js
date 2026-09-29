@@ -2175,55 +2175,215 @@ class TermixDashboard {
 
     // Configurações de IA
     const selectProvider = document.getElementById('ai-select-provider');
-    const selectModel = document.getElementById('ai-select-model');
+    const inputModel = document.getElementById('ai-input-model');
+    const modelDatalist = document.getElementById('ai-model-datalist');
+    const modelSuggestions = document.getElementById('ai-model-suggestions');
+    const selectRegion = document.getElementById('ai-select-region');
+    const regionGroup = document.getElementById('ai-region-group');
     const baseUrlGroup = document.getElementById('ai-baseurl-group');
     const apiKeyGroup = document.getElementById('ai-apikey-group');
+    const keyLabel = document.getElementById('ai-key-label');
     const keyHelp = document.getElementById('ai-key-help');
+    const keyPreviewText = document.getElementById('ai-key-preview-text');
+    const btnClearKey = document.getElementById('btn-clear-ai-key');
+    const inputApiKey = document.getElementById('ai-input-apikey');
+    const inputBaseUrl = document.getElementById('ai-input-baseurl');
+    const baseUrlHint = document.getElementById('ai-baseurl-hint');
+
+    this.clearKeyForProvider = {};
+    this.aiConfigCache = null;
+
+    btnClearKey?.addEventListener('click', () => {
+      const p = selectProvider?.value || 'gemini';
+      this.clearKeyForProvider[p] = true;
+      if (inputApiKey) inputApiKey.value = '';
+      if (keyPreviewText) {
+        keyPreviewText.textContent = 'Chave será removida ao salvar.';
+        keyPreviewText.style.color = '#ef4444';
+      }
+      btnClearKey.classList.add('hidden');
+    });
 
     selectProvider?.addEventListener('change', () => {
       const p = selectProvider.value;
-      if (!selectModel) return;
-      selectModel.innerHTML = '';
-      if (p === 'gemini') {
-        selectModel.innerHTML = `
-          <option value="gemini-2.5-flash">gemini-2.5-flash (Mais Recente e Rápido)</option>
-          <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-          <option value="gemini-1.5-pro">gemini-1.5-pro (Raciocínio Profundo)</option>
-        `;
-        baseUrlGroup?.classList.add('hidden');
-        apiKeyGroup?.classList.remove('hidden');
-        if (keyHelp) keyHelp.textContent = 'Obtenha gratuitamente no Google AI Studio (aistudio.google.com)';
-      } else if (p === 'ollama') {
-        selectModel.innerHTML = `
-          <option value="llama3.2">llama3.2 (Meta)</option>
-          <option value="qwen2.5-coder">qwen2.5-coder</option>
-          <option value="deepseek-r1">deepseek-r1</option>
-          <option value="mistral">mistral</option>
-        `;
+
+      // Modelos disponíveis por provedor
+      const modelPresets = {
+        gemini: [
+          { value: 'gemini-2.5-flash', label: 'gemini-2.5-flash (Mais Recente e Rápido)' },
+          { value: 'gemini-2.5-pro', label: 'gemini-2.5-pro (Raciocínio Profundo)' },
+          { value: 'gemini-1.5-flash', label: 'gemini-1.5-flash' },
+          { value: 'gemini-1.5-pro', label: 'gemini-1.5-pro' }
+        ],
+        openai: [
+          { value: 'gpt-4o-mini', label: 'gpt-4o-mini (Econômico e Rápido)' },
+          { value: 'gpt-4o', label: 'gpt-4o (Avançado)' },
+          { value: 'o3-mini', label: 'o3-mini (Raciocínio Rápido)' },
+          { value: 'o1-mini', label: 'o1-mini' }
+        ],
+        anthropic: [
+          { value: 'claude-3-5-sonnet-20241022', label: 'claude-3-5-sonnet (Mais Capaz)' },
+          { value: 'claude-3-5-haiku-20241022', label: 'claude-3-5-haiku (Rápido e Preciso)' },
+          { value: 'claude-3-opus-20240229', label: 'claude-3-opus' }
+        ],
+        deepseek: [
+          { value: 'deepseek-chat', label: 'deepseek-chat (DeepSeek V3 - Código & Shell)' },
+          { value: 'deepseek-reasoner', label: 'deepseek-reasoner (DeepSeek R1 - Raciocínio)' }
+        ],
+        nvidia: [
+          { value: 'meta/llama-3.3-70b-instruct', label: 'meta/llama-3.3-70b-instruct (Recomendado)' },
+          { value: 'deepseek-ai/deepseek-r1', label: 'deepseek-ai/deepseek-r1 (R1 na Nuvem NVIDIA)' },
+          { value: 'nvidia/llama-3.1-nemotron-70b-instruct', label: 'nvidia/llama-3.1-nemotron-70b-instruct' },
+          { value: 'mistralai/mistral-large-2-instruct', label: 'mistralai/mistral-large-2-instruct' },
+          { value: 'meta/llama-3.1-8b-instruct', label: 'meta/llama-3.1-8b-instruct (Ultra Rápido)' }
+        ],
+        bedrock: [
+          { value: 'anthropic.claude-3-5-sonnet-20241022-v2:0', label: 'Claude 3.5 Sonnet v2' },
+          { value: 'us.anthropic.claude-3-5-sonnet-20241022-v2:0', label: 'Claude 3.5 Sonnet v2 (Cross-Region)' },
+          { value: 'anthropic.claude-3-5-haiku-20241022-v1:0', label: 'Claude 3.5 Haiku' },
+          { value: 'amazon.nova-pro-v1:0', label: 'Amazon Nova Pro' },
+          { value: 'amazon.nova-lite-v1:0', label: 'Amazon Nova Lite' },
+          { value: 'amazon.nova-micro-v1:0', label: 'Amazon Nova Micro' },
+          { value: 'meta.llama3-3-70b-instruct-v1:0', label: 'Meta Llama 3.3 70B' },
+          { value: 'mistral.mistral-large-2407-v1:0', label: 'Mistral Large' }
+        ],
+        ollama: [
+          { value: 'llama3.2', label: 'llama3.2 (Meta)' },
+          { value: 'qwen2.5-coder', label: 'qwen2.5-coder (Alibaba)' },
+          { value: 'deepseek-r1', label: 'deepseek-r1 (Local)' },
+          { value: 'mistral', label: 'mistral' }
+        ],
+        custom: [
+          { value: 'gpt-4o-mini', label: 'gpt-4o-mini (Padrão OpenAI)' },
+          { value: 'gpt-4o', label: 'gpt-4o' },
+          { value: 'llama3.3', label: 'llama3.3' }
+        ]
+      };
+
+      const options = modelPresets[p] || modelPresets.gemini;
+
+      // Popula datalist nativo para autocompletion na caixa de texto
+      if (modelDatalist) {
+        modelDatalist.innerHTML = options.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
+      }
+
+      // Popula pílulas clicáveis de sugestão rápida
+      if (modelSuggestions) {
+        modelSuggestions.innerHTML = options.map(opt => `
+          <button type="button" class="ai-model-pill" data-model="${opt.value}" title="${opt.label}">
+            ${opt.value}
+          </button>
+        `).join('');
+
+        modelSuggestions.querySelectorAll('.ai-model-pill').forEach(pill => {
+          pill.addEventListener('click', () => {
+            const mVal = pill.getAttribute('data-model');
+            if (mVal && inputModel) {
+              inputModel.value = mVal;
+            }
+          });
+        });
+      }
+
+      // Restaura modelo salvo anteriormente para este provedor se houver, ou primeiro preset
+      const savedModel = this.aiConfigCache?.savedModels?.[p];
+      if (inputModel) {
+        inputModel.value = savedModel || options[0]?.value || '';
+      }
+
+      // Região AWS Bedrock
+      if (p === 'bedrock') {
+        regionGroup?.classList.remove('hidden');
+        const savedRegion = this.aiConfigCache?.savedRegions?.bedrock || 'us-east-1';
+        if (selectRegion) selectRegion.value = savedRegion;
+      } else {
+        regionGroup?.classList.add('hidden');
+      }
+
+      // URL Base / Endpoint
+      if (p === 'ollama') {
         baseUrlGroup?.classList.remove('hidden');
+        if (inputBaseUrl) {
+          inputBaseUrl.placeholder = 'http://localhost:11434/v1';
+          inputBaseUrl.value = this.aiConfigCache?.savedBaseUrls?.ollama || '';
+        }
+        if (baseUrlHint) baseUrlHint.textContent = 'Padrão Ollama local: http://localhost:11434/v1';
         apiKeyGroup?.classList.add('hidden');
-      } else if (p === 'openai') {
-        selectModel.innerHTML = `
-          <option value="gpt-4o-mini">gpt-4o-mini (Econômico e Rápido)</option>
-          <option value="gpt-4o">gpt-4o</option>
-          <option value="o3-mini">o3-mini</option>
-        `;
+      } else if (p === 'custom') {
+        baseUrlGroup?.classList.remove('hidden');
+        if (inputBaseUrl) {
+          inputBaseUrl.placeholder = 'https://api.openai-compatible.com/v1';
+          inputBaseUrl.value = this.aiConfigCache?.baseUrl || '';
+        }
+        if (baseUrlHint) baseUrlHint.textContent = 'URL do seu endpoint compatível com OpenAI (ex: Groq, vLLM, OpenRouter)';
+        apiKeyGroup?.classList.remove('hidden');
+      } else {
         baseUrlGroup?.classList.add('hidden');
         apiKeyGroup?.classList.remove('hidden');
-        if (keyHelp) keyHelp.textContent = 'Chave da plataforma OpenAI (platform.openai.com)';
-      } else if (p === 'anthropic') {
-        selectModel.innerHTML = `
-          <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet</option>
-          <option value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
-        `;
-        baseUrlGroup?.classList.add('hidden');
-        apiKeyGroup?.classList.remove('hidden');
-        if (keyHelp) keyHelp.textContent = 'Chave do console Anthropic (console.anthropic.com)';
+      }
+
+      // Rótulos e Links de Ajuda por Provedor
+      const helpTexts = {
+        gemini: {
+          label: 'Chave de API do Google Gemini',
+          help: 'Obtenha gratuitamente no Google AI Studio (aistudio.google.com)'
+        },
+        openai: {
+          label: 'Chave de API da OpenAI (sk-...)',
+          help: 'Console da plataforma OpenAI (platform.openai.com/api-keys)'
+        },
+        anthropic: {
+          label: 'Chave de API da Anthropic (sk-ant-...)',
+          help: 'Console da Anthropic Claude (console.anthropic.com/settings/keys)'
+        },
+        deepseek: {
+          label: 'Chave de API da DeepSeek (sk-...)',
+          help: 'Painel da plataforma DeepSeek (platform.deepseek.com/api_keys)'
+        },
+        nvidia: {
+          label: 'Chave de API da NVIDIA NIM (nvapi-...)',
+          help: 'Obtenha gratuitamente no portal NVIDIA Build (build.nvidia.com)'
+        },
+        bedrock: {
+          label: 'Chave Bedrock (Bearer Token) ou Credenciais AWS (AKIA...:SECRET)',
+          help: 'AWS Bedrock Console (console.aws.amazon.com/bedrock) ou Chave IAM (ACCESS_KEY:SECRET_KEY)'
+        },
+        custom: {
+          label: 'Chave de API / Bearer Token (se requerido)',
+          help: 'Chave de autorização para o servidor customizado'
+        }
+      };
+
+      if (keyLabel && helpTexts[p]) keyLabel.textContent = helpTexts[p].label;
+      if (keyHelp && helpTexts[p]) keyHelp.textContent = helpTexts[p].help;
+
+      // Status de chave salva para este provedor específico
+      if (inputApiKey) inputApiKey.value = '';
+      const pStatus = this.aiConfigCache?.providersStatus?.[p];
+      if (p === 'ollama') {
+        if (keyPreviewText) {
+          keyPreviewText.textContent = '100% Local / Offline (não requer chave de API).';
+          keyPreviewText.style.color = 'var(--text-muted)';
+        }
+        btnClearKey?.classList.add('hidden');
+      } else if (pStatus && pStatus.hasKey && !this.clearKeyForProvider[p]) {
+        if (keyPreviewText) {
+          keyPreviewText.textContent = `✓ Chave ativa: ${pStatus.keyPreview} (Criptografada AES-256-GCM)`;
+          keyPreviewText.style.color = '#34d399';
+        }
+        if (inputApiKey) inputApiKey.placeholder = '•••••••••••••••• (deixe em branco para manter a atual)';
+        btnClearKey?.classList.remove('hidden');
+      } else {
+        if (keyPreviewText) {
+          keyPreviewText.textContent = 'Nenhuma chave configurada para este provedor.';
+          keyPreviewText.style.color = 'var(--text-muted)';
+        }
+        if (inputApiKey) inputApiKey.placeholder = 'Cole sua chave de API aqui...';
+        btnClearKey?.classList.add('hidden');
       }
     });
 
     const btnToggleAiKey = document.getElementById('btn-toggle-ai-key');
-    const inputApiKey = document.getElementById('ai-input-apikey');
     btnToggleAiKey?.addEventListener('click', () => {
       if (inputApiKey) {
         inputApiKey.type = inputApiKey.type === 'password' ? 'text' : 'password';
@@ -2571,7 +2731,10 @@ class TermixDashboard {
 
   async openAISettings() {
     try {
+      this.clearKeyForProvider = {};
       const config = await this.callAI('getConfig');
+      this.aiConfigCache = config;
+
       if (config) {
         const selectProvider = document.getElementById('ai-select-provider');
         if (selectProvider) {
@@ -2579,9 +2742,14 @@ class TermixDashboard {
           selectProvider.dispatchEvent(new Event('change'));
         }
 
-        const selectModel = document.getElementById('ai-select-model');
-        if (selectModel && config.model) {
-          selectModel.value = config.model;
+        const inputModel = document.getElementById('ai-input-model');
+        if (inputModel && config.model) {
+          inputModel.value = config.model;
+        }
+
+        const selectRegion = document.getElementById('ai-select-region');
+        if (selectRegion && config.region) {
+          selectRegion.value = config.region;
         }
 
         const inputBaseUrl = document.getElementById('ai-input-baseurl');
@@ -2592,17 +2760,6 @@ class TermixDashboard {
         const checkRedact = document.getElementById('ai-check-redact');
         if (checkRedact) {
           checkRedact.checked = config.redactSecrets !== false;
-        }
-
-        const keyPreview = document.getElementById('ai-key-preview-text');
-        if (keyPreview) {
-          keyPreview.textContent = config.hasKey ? `Chave ativa: ${config.keyPreview} (Criptografada)` : 'Nenhuma chave configurada.';
-        }
-
-        const inputKey = document.getElementById('ai-input-apikey');
-        if (inputKey) {
-          inputKey.value = '';
-          inputKey.placeholder = config.hasKey ? '•••••••••••••••• (deixe em branco para manter a atual)' : 'Cole sua chave aqui...';
         }
       }
 
@@ -2617,19 +2774,26 @@ class TermixDashboard {
 
   async saveAISettings() {
     const provider = document.getElementById('ai-select-provider')?.value || 'gemini';
-    const model = document.getElementById('ai-select-model')?.value || 'gemini-2.5-flash';
+    const model = document.getElementById('ai-input-model')?.value?.trim() || 'gemini-2.5-flash';
+    const region = document.getElementById('ai-select-region')?.value || 'us-east-1';
     const apiKey = document.getElementById('ai-input-apikey')?.value || '';
     const baseUrl = document.getElementById('ai-input-baseurl')?.value || '';
     const redactSecrets = document.getElementById('ai-check-redact')?.checked;
+    const clearKey = Boolean(this.clearKeyForProvider?.[provider]);
 
     try {
-      await this.callAI('saveConfig', {
+      const savedConfig = await this.callAI('saveConfig', {
         provider,
         model,
+        region,
         apiKey,
         baseUrl,
+        clearKey,
         redactSecrets
       });
+
+      this.aiConfigCache = savedConfig;
+      this.clearKeyForProvider = {};
 
       const testStatus = document.getElementById('ai-test-status');
       if (testStatus) {
@@ -2660,7 +2824,8 @@ class TermixDashboard {
     testStatus?.classList.add('hidden');
 
     const provider = document.getElementById('ai-select-provider')?.value || 'gemini';
-    const model = document.getElementById('ai-select-model')?.value || 'gemini-2.5-flash';
+    const model = document.getElementById('ai-input-model')?.value?.trim() || 'gemini-2.5-flash';
+    const region = document.getElementById('ai-select-region')?.value || 'us-east-1';
     const apiKey = document.getElementById('ai-input-apikey')?.value || '';
     const baseUrl = document.getElementById('ai-input-baseurl')?.value || '';
 
@@ -2668,6 +2833,7 @@ class TermixDashboard {
       const res = await this.callAI('testConnection', {
         provider,
         model,
+        region,
         apiKey,
         baseUrl
       });
@@ -2679,7 +2845,7 @@ class TermixDashboard {
         testStatus.textContent = `✓ Conexão bem-sucedida com [${res.provider.toUpperCase()} - ${res.model}]!`;
       } else {
         testStatus.className = 'ai-test-status error';
-        testStatus.textContent = `✗ Falha na conexão: ${res?.error || 'Verifique sua chave de API e conexão.'}`;
+        testStatus.textContent = `✗ Falha na conexão: ${res?.error || 'Verifique sua chave de API e parâmetros.'}`;
       }
       testStatus?.classList.remove('hidden');
     } catch (err) {

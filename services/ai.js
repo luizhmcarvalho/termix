@@ -1,8 +1,10 @@
 /**
  * services/ai.js
  * Motor de Inteligência Artificial para o Termix
- * Suporte a múltiplos provedores: Google Gemini (nativo/padrão), OpenAI, Ollama (Local) e Anthropic
+ * Suporte a múltiplos provedores: Google Gemini (nativo/padrão), OpenAI, Anthropic, DeepSeek, NVIDIA NIM, AWS Bedrock e Ollama (Local)
  */
+
+const crypto = require('crypto');
 
 // Heurísticas de detecção de comandos perigosos/destrutivos
 const DANGEROUS_PATTERNS = [
@@ -18,6 +20,69 @@ const DANGEROUS_PATTERNS = [
 ];
 
 /**
+ * Assinatura AWS Signature Version 4 (SigV4) para chamadas REST ao AWS Bedrock
+ */
+function hmacSha256(key, data) {
+  return crypto.createHmac('sha256', key).update(data, 'utf8').digest();
+}
+
+function sha256Hex(data) {
+  return crypto.createHash('sha256').update(data, 'utf8').digest('hex');
+}
+
+function signAwsSigV4({ method, url, region, service, headers, body, accessKeyId, secretAccessKey, sessionToken }) {
+  const parsedUrl = new URL(url);
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const dateStamp = amzDate.substring(0, 8);
+
+  const finalHeaders = {
+    ...headers,
+    'host': parsedUrl.host,
+    'x-amz-date': amzDate
+  };
+
+  if (sessionToken) {
+    finalHeaders['x-amz-security-token'] = sessionToken;
+  }
+
+  const sortedHeaderKeys = Object.keys(finalHeaders).map(k => k.toLowerCase()).sort();
+  const canonicalHeaders = sortedHeaderKeys
+    .map(k => `${k}:${finalHeaders[k].trim()}\n`)
+    .join('');
+  const signedHeaders = sortedHeaderKeys.join(';');
+
+  const payloadHash = sha256Hex(body || '');
+
+  const canonicalRequest = [
+    method.toUpperCase(),
+    parsedUrl.pathname,
+    parsedUrl.search.replace(/^\?/, ''),
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash
+  ].join('\n');
+
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    amzDate,
+    credentialScope,
+    sha256Hex(canonicalRequest)
+  ].join('\n');
+
+  const kDate = hmacSha256('AWS4' + secretAccessKey, dateStamp);
+  const kRegion = hmacSha256(kDate, region);
+  const kService = hmacSha256(kRegion, service);
+  const kSigning = hmacSha256(kService, 'aws4_request');
+  const signature = crypto.createHmac('sha256', kSigning).update(stringToSign, 'utf8').digest('hex');
+
+  finalHeaders['Authorization'] = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  return finalHeaders;
+}
+
+/**
  * Mascara e higieniza segredos, senhas e chaves antes de enviar buffers para LLMs
  */
 function redactSensitiveData(text) {
@@ -30,6 +95,12 @@ function redactSensitiveData(text) {
     .replace(/eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/g, '[REDACTED_JWT_TOKEN]')
     // AWS Access Key ID
     .replace(/\b(AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b/g, '[REDACTED_AWS_KEY]')
+    // NVIDIA NIM API Key (nvapi-...)
+    .replace(/\bnvapi-[a-zA-Z0-9_\-]{30,}\b/g, '[REDACTED_NVIDIA_KEY]')
+    // Anthropic API Key (sk-ant-...)
+    .replace(/\bsk-ant-[a-zA-Z0-9_\-]{30,}\b/g, '[REDACTED_ANTHROPIC_KEY]')
+    // OpenAI / DeepSeek API Keys (sk-...)
+    .replace(/\bsk-[a-zA-Z0-9_\-]{30,}\b/g, '[REDACTED_API_KEY]')
     // GitHub Tokens
     .replace(/\b(ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9]{36,255}\b/g, '[REDACTED_GITHUB_TOKEN]')
     // Bearer / Authorization headers
@@ -86,7 +157,8 @@ class AIService {
     const config = this.getConfig();
     const provider = config.provider || 'gemini';
     const apiKey = config.apiKey || '';
-    const model = config.model || (provider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini');
+    const model = config.model;
+    const region = config.region || 'us-east-1';
 
     // Validações prévias
     if (provider !== 'ollama' && !apiKey) {
@@ -94,13 +166,27 @@ class AIService {
     }
 
     if (provider === 'gemini') {
-      return this._callGemini({ apiKey, model, systemPrompt, userPrompt, jsonMode, maxTokens });
+      return this._callGemini({ apiKey, model: model || 'gemini-2.5-flash', systemPrompt, userPrompt, jsonMode, maxTokens });
     } else if (provider === 'anthropic') {
-      return this._callAnthropic({ apiKey, model, systemPrompt, userPrompt, jsonMode, maxTokens });
+      return this._callAnthropic({ apiKey, model: model || 'claude-3-5-sonnet-20241022', systemPrompt, userPrompt, jsonMode, maxTokens });
+    } else if (provider === 'bedrock') {
+      return this._callBedrock({ apiKey, model: model || 'anthropic.claude-3-5-sonnet-20241022-v2:0', region, systemPrompt, userPrompt, maxTokens });
+    } else if (provider === 'deepseek') {
+      const baseUrl = config.baseUrl || 'https://api.deepseek.com';
+      return this._callOpenAICompatible({ baseUrl, apiKey, model: model || 'deepseek-chat', systemPrompt, userPrompt, jsonMode, maxTokens });
+    } else if (provider === 'nvidia') {
+      const baseUrl = config.baseUrl || 'https://integrate.api.nvidia.com/v1';
+      return this._callOpenAICompatible({ baseUrl, apiKey, model: model || 'meta/llama-3.3-70b-instruct', systemPrompt, userPrompt, jsonMode, maxTokens });
     } else {
-      // OpenAI ou Ollama ou qualquer endpoint compatível
-      const baseUrl = config.baseUrl || (provider === 'ollama' ? 'http://localhost:11434/v1' : 'https://api.openai.com/v1');
-      return this._callOpenAICompatible({ baseUrl, apiKey, model, systemPrompt, userPrompt, jsonMode, maxTokens });
+      // openai, ollama ou custom
+      let defaultBaseUrl = 'https://api.openai.com/v1';
+      let defaultModel = 'gpt-4o-mini';
+      if (provider === 'ollama') {
+        defaultBaseUrl = 'http://localhost:11434/v1';
+        defaultModel = 'llama3.2';
+      }
+      const baseUrl = config.baseUrl || defaultBaseUrl;
+      return this._callOpenAICompatible({ baseUrl, apiKey, model: model || defaultModel, systemPrompt, userPrompt, jsonMode, maxTokens });
     }
   }
 
@@ -160,10 +246,10 @@ class AIService {
   }
 
   /**
-   * Integração com endpoints compatíveis com a OpenAI (OpenAI, Ollama, LM Studio, Groq)
+   * Integração com endpoints compatíveis com a OpenAI (OpenAI, DeepSeek, NVIDIA, Ollama, LM Studio, etc.)
    */
   async _callOpenAICompatible({ baseUrl, apiKey, model, systemPrompt, userPrompt, jsonMode, maxTokens }) {
-    const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
+    const cleanBaseUrl = (baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
     const url = `${cleanBaseUrl}/chat/completions`;
 
     const messages = [];
@@ -172,14 +258,20 @@ class AIService {
     }
     messages.push({ role: 'user', content: userPrompt });
 
+    // Modelos de raciocínio (ex: deepseek-reasoner / R1) têm parâmetros estritos
+    const isReasoner = (model || '').toLowerCase().includes('reasoner') || (model || '').toLowerCase().includes('deepseek-r1');
+
     const bodyPayload = {
       model: model || 'gpt-4o-mini',
       messages,
-      temperature: 0.2,
       max_tokens: maxTokens
     };
 
-    if (jsonMode) {
+    if (!isReasoner) {
+      bodyPayload.temperature = 0.2;
+    }
+
+    if (jsonMode && !isReasoner) {
       bodyPayload.response_format = { type: 'json_object' };
     }
 
@@ -200,17 +292,17 @@ class AIService {
       let errDetails = '';
       try {
         const errJson = await res.json();
-        errDetails = errJson.error ? errJson.error.message : JSON.stringify(errJson);
+        errDetails = errJson.error ? (errJson.error.message || JSON.stringify(errJson.error)) : JSON.stringify(errJson);
       } catch (_) {
         errDetails = await res.text();
       }
-      throw new Error(`Erro na API compatível com OpenAI (${res.status}): ${errDetails}`);
+      throw new Error(`Erro na API (${res.status}): ${errDetails}`);
     }
 
     const data = await res.json();
     const text = data.choices?.[0]?.message?.content;
     if (!text) {
-      throw new Error('Nenhuma resposta de texto retornada pelo provedor OpenAI.');
+      throw new Error('Nenhuma resposta de texto retornada pelo provedor de IA.');
     }
 
     return text;
@@ -247,7 +339,7 @@ class AIService {
       let errDetails = '';
       try {
         const errJson = await res.json();
-        errDetails = errJson.error ? errJson.error.message : JSON.stringify(errJson);
+        errDetails = errJson.error ? (errJson.error.message || JSON.stringify(errJson.error)) : JSON.stringify(errJson);
       } catch (_) {
         errDetails = await res.text();
       }
@@ -264,6 +356,102 @@ class AIService {
   }
 
   /**
+   * Integração com o AWS Bedrock (Converse API)
+   * Suporta autenticação via:
+   * 1. Bedrock API Key / Bearer token (Authorization: Bearer <key>)
+   * 2. AWS SigV4 Credentials (formato "ACCESS_KEY_ID:SECRET_KEY" ou "ACCESS_KEY_ID:SECRET_KEY:SESSION_TOKEN" ou env vars)
+   */
+  async _callBedrock({ apiKey, model, region = 'us-east-1', systemPrompt, userPrompt, maxTokens }) {
+    const targetRegion = region || 'us-east-1';
+    const targetModel = model || 'anthropic.claude-3-5-sonnet-20241022-v2:0';
+    const url = `https://bedrock-runtime.${targetRegion}.amazonaws.com/model/${encodeURIComponent(targetModel)}/converse`;
+
+    const bodyPayload = {
+      messages: [
+        {
+          role: 'user',
+          content: [{ text: userPrompt }]
+        }
+      ],
+      inferenceConfig: {
+        maxTokens: maxTokens || 1000,
+        temperature: 0.2
+      }
+    };
+
+    if (systemPrompt) {
+      bodyPayload.system = [{ text: systemPrompt }];
+    }
+
+    const bodyStr = JSON.stringify(bodyPayload);
+    let headers = {
+      'Content-Type': 'application/json'
+    };
+
+    const trimmedKey = (apiKey || '').trim();
+    if (trimmedKey.includes(':')) {
+      const parts = trimmedKey.split(':');
+      const accessKeyId = parts[0].trim();
+      const secretAccessKey = parts[1].trim();
+      const sessionToken = parts[2] ? parts[2].trim() : null;
+
+      headers = signAwsSigV4({
+        method: 'POST',
+        url,
+        region: targetRegion,
+        service: 'bedrock',
+        headers,
+        body: bodyStr,
+        accessKeyId,
+        secretAccessKey,
+        sessionToken
+      });
+    } else if (trimmedKey.startsWith('AKIA') || trimmedKey.startsWith('ASIA')) {
+      const accessKeyId = trimmedKey;
+      const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || '';
+      headers = signAwsSigV4({
+        method: 'POST',
+        url,
+        region: targetRegion,
+        service: 'bedrock',
+        headers,
+        body: bodyStr,
+        accessKeyId,
+        secretAccessKey,
+        sessionToken: process.env.AWS_SESSION_TOKEN || null
+      });
+    } else {
+      // Bedrock API Key / Bearer token
+      headers['Authorization'] = `Bearer ${trimmedKey}`;
+    }
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: bodyStr
+    });
+
+    if (!res.ok) {
+      let errDetails = '';
+      try {
+        const errJson = await res.json();
+        errDetails = errJson.message || errJson.Message || JSON.stringify(errJson);
+      } catch (_) {
+        errDetails = await res.text();
+      }
+      throw new Error(`Erro na API do AWS Bedrock (${res.status}): ${errDetails}`);
+    }
+
+    const data = await res.json();
+    const text = data.output?.message?.content?.[0]?.text;
+    if (!text) {
+      throw new Error('Nenhuma resposta de texto retornada pelo AWS Bedrock.');
+    }
+
+    return text;
+  }
+
+  /**
    * Testa a conectividade com o modelo configurado
    */
   async testConnection(testConfig = null) {
@@ -271,22 +459,33 @@ class AIService {
     try {
       if (testConfig) {
         originalConfig = this.db.getAIConfig(true);
-        this.db.saveAIConfig(testConfig);
+        let testKey = testConfig.apiKey;
+        // Se a chave não foi redigitada no teste, usa a chave salva daquele provedor
+        if (!testKey || testKey.includes('••••') || testKey.includes('...')) {
+          const providerKeys = originalConfig.keys_decrypted || {};
+          testKey = providerKeys[testConfig.provider] || (originalConfig.provider === testConfig.provider ? originalConfig.apiKey : '');
+        }
+
+        this.db.saveAIConfig({
+          ...testConfig,
+          apiKey: testKey
+        });
       }
 
       const prompt = 'Responda com o JSON: {"status": "ok", "message": "Conexão com Termix estabelecida com sucesso"}';
       const raw = await this.callLLM({
-        systemPrompt: 'Você é um assistente de validação de conectividade. Responda estritamente em JSON.',
+        systemPrompt: 'Você é um assistente de validação de conectividade do Termix. Responda estritamente em JSON.',
         userPrompt: prompt,
         jsonMode: true,
         maxTokens: 100
       });
 
       const parsed = extractJsonFromText(raw);
+      const activeConf = this.getConfig();
       return {
         success: true,
-        provider: this.getConfig().provider,
-        model: this.getConfig().model,
+        provider: activeConf.provider,
+        model: activeConf.model,
         message: parsed?.message || 'Conexão validada com sucesso!'
       };
     } catch (err) {
