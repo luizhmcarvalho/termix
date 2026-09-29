@@ -66,6 +66,12 @@ class DatabaseManager {
         updated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_hosts_name ON hosts(name);
       CREATE INDEX IF NOT EXISTS idx_identities_name ON identities(name);
       CREATE INDEX IF NOT EXISTS idx_workspaces_name ON workspaces(name);
@@ -445,6 +451,104 @@ class DatabaseManager {
     const stmt = this.db.prepare('DELETE FROM workspaces WHERE id = ?');
     stmt.run(id);
     return { success: true, id };
+  }
+
+  // --- CONFIGURAÇÕES DO SISTEMA & IA ---
+
+  getSetting(key) {
+    const stmt = this.db.prepare('SELECT value_json FROM settings WHERE key = ?');
+    const row = stmt.get(key);
+    if (!row || !row.value_json) return null;
+    try {
+      return JSON.parse(row.value_json);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  saveSetting(key, value) {
+    const now = new Date().toISOString();
+    const valueJson = JSON.stringify(value);
+    const stmt = this.db.prepare(`
+      INSERT INTO settings (key, value_json, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET
+        value_json = excluded.value_json,
+        updated_at = excluded.updated_at
+    `);
+    stmt.run(key, valueJson, now);
+    return value;
+  }
+
+  deleteSetting(key) {
+    const stmt = this.db.prepare('DELETE FROM settings WHERE key = ?');
+    stmt.run(key);
+    return { success: true, key };
+  }
+
+  getAIConfig(includeDecryptedKey = false) {
+    const raw = this.getSetting('ai_config') || {
+      provider: 'gemini',
+      model: 'gemini-2.5-flash',
+      apiKey_enc: '',
+      baseUrl: '',
+      redactSecrets: true,
+      autoSuggestOnExitError: true
+    };
+
+    let decryptedKey = '';
+    if (raw.apiKey_enc) {
+      decryptedKey = this.crypto.decrypt(raw.apiKey_enc) || '';
+    }
+
+    const hasKey = Boolean(decryptedKey);
+    let keyPreview = '';
+    if (hasKey) {
+      if (decryptedKey.length > 8) {
+        keyPreview = `${decryptedKey.substring(0, 4)}...${decryptedKey.substring(decryptedKey.length - 4)}`;
+      } else {
+        keyPreview = '••••••••';
+      }
+    }
+
+    return {
+      provider: raw.provider || 'gemini',
+      model: raw.model || 'gemini-2.5-flash',
+      baseUrl: raw.baseUrl || '',
+      redactSecrets: raw.redactSecrets !== false,
+      autoSuggestOnExitError: raw.autoSuggestOnExitError !== false,
+      hasKey,
+      keyPreview,
+      ...(includeDecryptedKey ? { apiKey: decryptedKey } : {})
+    };
+  }
+
+  saveAIConfig(data = {}) {
+    const current = this.getSetting('ai_config') || {};
+    let apiKeyEnc = current.apiKey_enc || '';
+
+    // Se o usuário passou uma nova apiKey em texto claro
+    if (typeof data.apiKey === 'string') {
+      const trimmed = data.apiKey.trim();
+      if (trimmed === '') {
+        apiKeyEnc = '';
+      } else if (!trimmed.includes('...')) {
+        // Criptografa chave com AES-256-GCM
+        apiKeyEnc = this.crypto.encrypt(trimmed);
+      }
+    }
+
+    const newConfig = {
+      provider: data.provider || current.provider || 'gemini',
+      model: data.model || current.model || 'gemini-2.5-flash',
+      baseUrl: typeof data.baseUrl === 'string' ? data.baseUrl.trim() : (current.baseUrl || ''),
+      redactSecrets: data.redactSecrets !== undefined ? Boolean(data.redactSecrets) : (current.redactSecrets !== false),
+      autoSuggestOnExitError: data.autoSuggestOnExitError !== undefined ? Boolean(data.autoSuggestOnExitError) : (current.autoSuggestOnExitError !== false),
+      apiKey_enc: apiKeyEnc
+    };
+
+    this.saveSetting('ai_config', newConfig);
+    return this.getAIConfig(false);
   }
 }
 

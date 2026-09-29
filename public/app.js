@@ -103,6 +103,7 @@ class TermixDashboard {
     this.initGlobalEvents();
     this.initHostsManager();
     this.initWorkspacesManager();
+    this.initAIManager();
   }
 
   /**
@@ -186,6 +187,12 @@ class TermixDashboard {
     if (window.termix.onShowAbout) {
       window.termix.onShowAbout(() => {
         this.helpModalEl.classList.remove('hidden');
+      });
+    }
+
+    if (window.termix.onOpenAICopilot) {
+      window.termix.onOpenAICopilot(() => {
+        this.openAICopilot();
       });
     }
 
@@ -657,6 +664,12 @@ class TermixDashboard {
         this.openWorkspacesModal();
       }
 
+      // Cmd + I ou Alt + I: Termix Copilot (Assistente de IA)
+      if ((e.altKey && e.code === 'KeyI') || (e.metaKey && !e.shiftKey && e.code === 'KeyI') || (e.ctrlKey && !e.shiftKey && e.code === 'KeyI')) {
+        e.preventDefault();
+        this.openAICopilot();
+      }
+
       if (e.key === 'Escape') {
         layoutDropdownMenu?.classList.add('hidden');
         btnLayoutDropdown?.setAttribute('aria-expanded', 'false');
@@ -667,6 +680,10 @@ class TermixDashboard {
         this.hostsModalEl?.classList.add('hidden');
         this.workspaceFormModalEl?.classList.add('hidden');
         this.workspacesModalEl?.classList.add('hidden');
+        this.aiCopilotModalEl?.classList.add('hidden');
+        this.aiDiagnosisModalEl?.classList.add('hidden');
+        this.aiBroadcastModalEl?.classList.add('hidden');
+        this.aiSettingsModalEl?.classList.add('hidden');
       }
     });
 
@@ -2051,6 +2068,629 @@ class TermixDashboard {
       }, index * 120);
     });
   }
+
+  // ==========================================================================
+  // MOTOR DE INTELIGÊNCIA ARTIFICIAL (TERMIX COPILOT)
+  // ==========================================================================
+
+  initAIManager() {
+    this.btnOpenAi = document.getElementById('btn-open-ai');
+    this.btnOpenAiSettings = document.getElementById('btn-open-ai-settings');
+    this.btnBroadcastAi = document.getElementById('btn-broadcast-ai');
+
+    this.aiCopilotModalEl = document.getElementById('ai-copilot-modal');
+    this.aiDiagnosisModalEl = document.getElementById('ai-diagnosis-modal');
+    this.aiBroadcastModalEl = document.getElementById('ai-broadcast-modal');
+    this.aiSettingsModalEl = document.getElementById('ai-settings-modal');
+
+    this.aiPromptInputEl = document.getElementById('ai-prompt-input');
+    this.btnGenerateAiCommand = document.getElementById('btn-generate-ai-command');
+    this.aiLoadingStateEl = document.getElementById('ai-loading-state');
+    this.aiErrorBannerEl = document.getElementById('ai-error-banner');
+    this.aiErrorMessageEl = document.getElementById('ai-error-message');
+    this.aiResultCardEl = document.getElementById('ai-result-card');
+    this.aiDangerWarningEl = document.getElementById('ai-danger-warning');
+    this.aiDangerTextEl = document.getElementById('ai-danger-text');
+    this.aiSuggestedCodeEl = document.getElementById('ai-suggested-code');
+    this.aiExplanationTextEl = document.getElementById('ai-explanation-text');
+    this.aiModelBadgeEl = document.getElementById('ai-model-badge');
+    this.copilotContextPillEl = document.getElementById('copilot-context-pill');
+
+    this.lastGeneratedCommand = '';
+    this.currentDiagnosisFix = '';
+    this.diagnosisTargetTermId = null;
+
+    // Abertura de modais
+    this.btnOpenAi?.addEventListener('click', () => this.openAICopilot());
+    this.btnOpenAiSettings?.addEventListener('click', () => this.openAISettings());
+    this.btnBroadcastAi?.addEventListener('click', () => this.openBroadcastAISummary());
+
+    // Fechamento de modais
+    document.getElementById('btn-close-ai-copilot')?.addEventListener('click', () => {
+      this.aiCopilotModalEl?.classList.add('hidden');
+    });
+    document.getElementById('btn-close-diagnosis-modal')?.addEventListener('click', () => {
+      this.aiDiagnosisModalEl?.classList.add('hidden');
+    });
+    document.getElementById('btn-close-diagnosis-action')?.addEventListener('click', () => {
+      this.aiDiagnosisModalEl?.classList.add('hidden');
+    });
+    document.getElementById('btn-close-broadcast-ai-modal')?.addEventListener('click', () => {
+      this.aiBroadcastModalEl?.classList.add('hidden');
+    });
+    document.getElementById('btn-close-ai-settings')?.addEventListener('click', () => {
+      this.aiSettingsModalEl?.classList.add('hidden');
+    });
+    document.getElementById('btn-go-ai-settings')?.addEventListener('click', () => {
+      this.aiCopilotModalEl?.classList.add('hidden');
+      this.openAISettings();
+    });
+
+    // Envio de prompt no Copilot
+    this.btnGenerateAiCommand?.addEventListener('click', () => this.generateAICommand());
+    this.aiPromptInputEl?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.generateAICommand();
+      }
+    });
+
+    // Pílulas de comandos rápidos
+    document.querySelectorAll('.ai-quick-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const prompt = btn.getAttribute('data-prompt');
+        if (prompt && this.aiPromptInputEl) {
+          this.aiPromptInputEl.value = prompt;
+          this.generateAICommand();
+        }
+      });
+    });
+
+    // Ações do comando gerado
+    document.getElementById('btn-ai-copy-command')?.addEventListener('click', () => {
+      if (this.lastGeneratedCommand) {
+        this.copyToClipboard(this.lastGeneratedCommand);
+        const span = document.getElementById('btn-ai-copy-command')?.querySelector('span');
+        if (span) {
+          const original = span.textContent;
+          span.textContent = 'Copiado!';
+          setTimeout(() => { span.textContent = original; }, 1500);
+        }
+      }
+    });
+
+    document.getElementById('btn-ai-insert-only')?.addEventListener('click', () => {
+      if (this.lastGeneratedCommand) {
+        this.insertCommandToActiveTerminal(this.lastGeneratedCommand, false);
+        this.aiCopilotModalEl?.classList.add('hidden');
+      }
+    });
+
+    document.getElementById('btn-ai-run-now')?.addEventListener('click', () => {
+      if (this.lastGeneratedCommand) {
+        this.insertCommandToActiveTerminal(this.lastGeneratedCommand, true);
+        this.aiCopilotModalEl?.classList.add('hidden');
+      }
+    });
+
+    // Configurações de IA
+    const selectProvider = document.getElementById('ai-select-provider');
+    const selectModel = document.getElementById('ai-select-model');
+    const baseUrlGroup = document.getElementById('ai-baseurl-group');
+    const apiKeyGroup = document.getElementById('ai-apikey-group');
+    const keyHelp = document.getElementById('ai-key-help');
+
+    selectProvider?.addEventListener('change', () => {
+      const p = selectProvider.value;
+      if (!selectModel) return;
+      selectModel.innerHTML = '';
+      if (p === 'gemini') {
+        selectModel.innerHTML = `
+          <option value="gemini-2.5-flash">gemini-2.5-flash (Mais Recente e Rápido)</option>
+          <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+          <option value="gemini-1.5-pro">gemini-1.5-pro (Raciocínio Profundo)</option>
+        `;
+        baseUrlGroup?.classList.add('hidden');
+        apiKeyGroup?.classList.remove('hidden');
+        if (keyHelp) keyHelp.textContent = 'Obtenha gratuitamente no Google AI Studio (aistudio.google.com)';
+      } else if (p === 'ollama') {
+        selectModel.innerHTML = `
+          <option value="llama3.2">llama3.2 (Meta)</option>
+          <option value="qwen2.5-coder">qwen2.5-coder</option>
+          <option value="deepseek-r1">deepseek-r1</option>
+          <option value="mistral">mistral</option>
+        `;
+        baseUrlGroup?.classList.remove('hidden');
+        apiKeyGroup?.classList.add('hidden');
+      } else if (p === 'openai') {
+        selectModel.innerHTML = `
+          <option value="gpt-4o-mini">gpt-4o-mini (Econômico e Rápido)</option>
+          <option value="gpt-4o">gpt-4o</option>
+          <option value="o3-mini">o3-mini</option>
+        `;
+        baseUrlGroup?.classList.add('hidden');
+        apiKeyGroup?.classList.remove('hidden');
+        if (keyHelp) keyHelp.textContent = 'Chave da plataforma OpenAI (platform.openai.com)';
+      } else if (p === 'anthropic') {
+        selectModel.innerHTML = `
+          <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet</option>
+          <option value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
+        `;
+        baseUrlGroup?.classList.add('hidden');
+        apiKeyGroup?.classList.remove('hidden');
+        if (keyHelp) keyHelp.textContent = 'Chave do console Anthropic (console.anthropic.com)';
+      }
+    });
+
+    const btnToggleAiKey = document.getElementById('btn-toggle-ai-key');
+    const inputApiKey = document.getElementById('ai-input-apikey');
+    btnToggleAiKey?.addEventListener('click', () => {
+      if (inputApiKey) {
+        inputApiKey.type = inputApiKey.type === 'password' ? 'text' : 'password';
+      }
+    });
+
+    document.getElementById('btn-test-ai-connection')?.addEventListener('click', () => {
+      this.testAIConnection();
+    });
+
+    document.getElementById('form-ai-settings')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.saveAISettings();
+    });
+
+    document.getElementById('btn-diagnosis-apply-fix')?.addEventListener('click', () => {
+      if (this.currentDiagnosisFix && this.diagnosisTargetTermId) {
+        this.insertCommandToTerminal(this.diagnosisTargetTermId, this.currentDiagnosisFix, true);
+        this.aiDiagnosisModalEl?.classList.add('hidden');
+      }
+    });
+
+    document.getElementById('btn-diagnosis-copy-fix')?.addEventListener('click', () => {
+      if (this.currentDiagnosisFix) {
+        this.copyToClipboard(this.currentDiagnosisFix);
+        const span = document.getElementById('btn-diagnosis-copy-fix')?.querySelector('span');
+        if (span) {
+          const original = span.textContent;
+          span.textContent = 'Copiado!';
+          setTimeout(() => { span.textContent = original; }, 1500);
+        }
+      }
+    });
+  }
+
+  async callAI(action, payload) {
+    if (this.isElectron && window.termix && window.termix.ai) {
+      if (action === 'getConfig') return await window.termix.ai.getConfig();
+      if (action === 'saveConfig') return await window.termix.ai.saveConfig(payload);
+      if (action === 'testConnection') return await window.termix.ai.testConnection(payload);
+      if (action === 'generateCommand') return await window.termix.ai.generateCommand(payload);
+      if (action === 'diagnoseError') return await window.termix.ai.diagnoseError(payload);
+      if (action === 'explainCommand') return await window.termix.ai.explainCommand(payload);
+      if (action === 'summarizeBroadcast') return await window.termix.ai.summarizeBroadcast(payload);
+    } else {
+      const isGet = action.startsWith('get') || action === 'getConfig';
+      const endpoint = action === 'getConfig' ? 'config' : action;
+      const res = await fetch(`/api/ai/${endpoint}`, {
+        method: isGet ? 'GET' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: isGet ? undefined : JSON.stringify(payload)
+      });
+      return await res.json();
+    }
+  }
+
+  copyToClipboard(text) {
+    if (!text) return;
+    if (this.isElectron && window.termix && window.termix.writeClipboard) {
+      window.termix.writeClipboard(text);
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+  }
+
+  getActiveTerminalContext() {
+    const term = this.activeTerminalId ? this.terminals.get(this.activeTerminalId) : null;
+    if (!term) {
+      return {
+        platform: this.isElectron ? window.termix.platform : 'darwin',
+        shell: 'zsh',
+        hostName: 'Local',
+        isSSH: false,
+        cwd: '~',
+        recentOutput: ''
+      };
+    }
+
+    const isSSH = Boolean(term.title && term.title.toLowerCase().includes('ssh'));
+    return {
+      platform: this.isElectron ? window.termix.platform : 'darwin',
+      shell: term.shell || 'zsh',
+      hostName: term.title || 'Terminal',
+      isSSH,
+      cwd: term.cwd || '~',
+      recentOutput: term.getRecentOutput(30)
+    };
+  }
+
+  openAICopilot(targetTermId = null) {
+    if (targetTermId) {
+      this.setActiveTerminal(targetTermId);
+    }
+
+    const term = this.activeTerminalId ? this.terminals.get(this.activeTerminalId) : null;
+    if (this.copilotContextPillEl) {
+      if (term) {
+        this.copilotContextPillEl.textContent = `✦ ${term.title} (${term.shell || 'shell'})`;
+        this.copilotContextPillEl.title = `Terminal ID: ${term.id}`;
+      } else {
+        this.copilotContextPillEl.textContent = 'Nenhum terminal ativo';
+      }
+    }
+
+    // Limpa estado anterior se houver
+    this.aiErrorBannerEl?.classList.add('hidden');
+    this.aiLoadingStateEl?.classList.add('hidden');
+    this.aiResultCardEl?.classList.add('hidden');
+
+    this.aiCopilotModalEl?.classList.remove('hidden');
+    setTimeout(() => {
+      this.aiPromptInputEl?.focus();
+      this.aiPromptInputEl?.select();
+    }, 50);
+  }
+
+  async generateAICommand() {
+    const prompt = this.aiPromptInputEl?.value?.trim();
+    if (!prompt) return;
+
+    this.aiErrorBannerEl?.classList.add('hidden');
+    this.aiResultCardEl?.classList.add('hidden');
+    this.aiLoadingStateEl?.classList.remove('hidden');
+
+    try {
+      const context = this.getActiveTerminalContext();
+      const res = await this.callAI('generateCommand', { prompt, context });
+
+      this.aiLoadingStateEl?.classList.add('hidden');
+
+      if (!res || res.error) {
+        throw new Error(res?.error || 'Falha ao gerar comando.');
+      }
+
+      this.lastGeneratedCommand = res.command || '';
+      if (this.aiSuggestedCodeEl) {
+        this.aiSuggestedCodeEl.textContent = res.command || '';
+      }
+      if (this.aiExplanationTextEl) {
+        this.aiExplanationTextEl.textContent = res.explanation || 'Comando pronto para execução.';
+      }
+
+      // Alerta de comando de risco
+      if (res.isDangerous && this.aiDangerWarningEl) {
+        this.aiDangerWarningEl.classList.remove('hidden');
+        if (this.aiDangerTextEl) {
+          this.aiDangerTextEl.textContent = res.riskWarning || 'Este comando pode modificar ou remover arquivos do sistema.';
+        }
+      } else {
+        this.aiDangerWarningEl?.classList.add('hidden');
+      }
+
+      this.aiResultCardEl?.classList.remove('hidden');
+    } catch (err) {
+      this.aiLoadingStateEl?.classList.add('hidden');
+      if (this.aiErrorMessageEl) {
+        this.aiErrorMessageEl.textContent = err.message || 'Erro ao processar comando com IA.';
+      }
+      this.aiErrorBannerEl?.classList.remove('hidden');
+    }
+  }
+
+  insertCommandToActiveTerminal(command, executeNow = false) {
+    if (!this.activeTerminalId && this.terminals.size > 0) {
+      this.setActiveTerminal(Array.from(this.terminals.keys())[0]);
+    }
+    if (this.activeTerminalId) {
+      this.insertCommandToTerminal(this.activeTerminalId, command, executeNow);
+    }
+  }
+
+  insertCommandToTerminal(termId, command, executeNow = false) {
+    const inst = this.terminals.get(termId);
+    if (!inst) return;
+    const finalCmd = executeNow ? `${command}\r` : command;
+    this.sendInput(termId, finalCmd);
+    inst.focus();
+  }
+
+  async openErrorDiagnosis(termId) {
+    const inst = this.terminals.get(termId);
+    if (!inst) return;
+
+    this.diagnosisTargetTermId = termId;
+    this.currentDiagnosisFix = '';
+
+    const titleEl = document.getElementById('diagnosis-term-title');
+    if (titleEl) {
+      titleEl.textContent = `Analisando erro em: ${inst.title}`;
+    }
+
+    const hostBadge = document.getElementById('diagnosis-host-badge');
+    if (hostBadge) {
+      hostBadge.textContent = inst.title.includes('SSH') ? 'SSH Remoto' : 'Local';
+    }
+
+    const loadingEl = document.getElementById('diagnosis-loading');
+    const contentEl = document.getElementById('diagnosis-content');
+    loadingEl?.classList.remove('hidden');
+    contentEl?.classList.add('hidden');
+
+    this.aiDiagnosisModalEl?.classList.remove('hidden');
+
+    try {
+      const recentOutput = inst.getRecentOutput(50);
+      const res = await this.callAI('diagnoseError', {
+        command: '',
+        errorText: recentOutput,
+        exitCode: inst.exitCode || null,
+        context: {
+          platform: this.isElectron ? window.termix.platform : 'darwin',
+          isSSH: inst.title.includes('SSH'),
+          cwd: inst.cwd || '~'
+        }
+      });
+
+      loadingEl?.classList.add('hidden');
+
+      if (!res || res.error) {
+        throw new Error(res?.error || 'Falha ao diagnosticar erro.');
+      }
+
+      const rootCauseEl = document.getElementById('diagnosis-root-cause');
+      if (rootCauseEl) rootCauseEl.textContent = res.rootCause || 'Falha de Execução';
+      const diagTextEl = document.getElementById('diagnosis-text');
+      if (diagTextEl) diagTextEl.textContent = res.diagnosis || 'Erro detectado no terminal.';
+
+      const fixContainer = document.getElementById('diagnosis-fix-container');
+      const applyBtn = document.getElementById('btn-diagnosis-apply-fix');
+
+      if (res.fixCommand) {
+        this.currentDiagnosisFix = res.fixCommand;
+        const fixCodeEl = document.getElementById('diagnosis-fix-code');
+        if (fixCodeEl) fixCodeEl.textContent = res.fixCommand;
+        const fixExplEl = document.getElementById('diagnosis-fix-explanation');
+        if (fixExplEl) fixExplEl.textContent = res.explanation || '';
+        fixContainer?.classList.remove('hidden');
+        applyBtn?.classList.remove('hidden');
+      } else {
+        fixContainer?.classList.add('hidden');
+        applyBtn?.classList.add('hidden');
+      }
+
+      const prevBox = document.getElementById('diagnosis-preventive-box');
+      if (res.preventiveTip) {
+        const prevTextEl = document.getElementById('diagnosis-preventive-text');
+        if (prevTextEl) prevTextEl.textContent = res.preventiveTip;
+        prevBox?.classList.remove('hidden');
+      } else {
+        prevBox?.classList.add('hidden');
+      }
+
+      contentEl?.classList.remove('hidden');
+    } catch (err) {
+      loadingEl?.classList.add('hidden');
+      const diagTextEl = document.getElementById('diagnosis-text');
+      if (diagTextEl) diagTextEl.textContent = `Falha na análise: ${err.message}`;
+      contentEl?.classList.remove('hidden');
+    }
+  }
+
+  async openBroadcastAISummary() {
+    if (this.terminals.size === 0) {
+      alert('Nenhum terminal ativo para resumir.');
+      return;
+    }
+
+    const broadcastCmd = this.broadcastInputEl?.value?.trim() || 'Comando transmitido aos terminais';
+    const outputs = [];
+
+    for (const [id, inst] of this.terminals) {
+      outputs.push({
+        title: inst.title,
+        host: inst.title.includes('SSH') ? 'SSH' : 'Local',
+        exitCode: inst.exitCode || 0,
+        output: inst.getRecentOutput(35)
+      });
+    }
+
+    const loadingEl = document.getElementById('broadcast-ai-loading');
+    const contentEl = document.getElementById('broadcast-ai-content');
+    loadingEl?.classList.remove('hidden');
+    contentEl?.classList.add('hidden');
+
+    this.aiBroadcastModalEl?.classList.remove('hidden');
+
+    try {
+      const res = await this.callAI('summarizeBroadcast', {
+        broadcastCommand: broadcastCmd,
+        outputs
+      });
+
+      loadingEl?.classList.add('hidden');
+
+      if (!res || res.error) {
+        throw new Error(res?.error || 'Falha ao resumir broadcast.');
+      }
+
+      const totalEl = document.getElementById('broadcast-metric-total');
+      if (totalEl) totalEl.textContent = res.totalHosts || outputs.length;
+      const successEl = document.getElementById('broadcast-metric-success');
+      if (successEl) successEl.textContent = res.successfulHosts || 0;
+      const failedEl = document.getElementById('broadcast-metric-failed');
+      if (failedEl) failedEl.textContent = res.failedHosts || 0;
+
+      const summaryTextEl = document.getElementById('broadcast-summary-text');
+      if (summaryTextEl) summaryTextEl.textContent = res.summary || 'Resumo concluído.';
+
+      const anomaliesList = document.getElementById('broadcast-anomalies-list');
+      if (anomaliesList) {
+        anomaliesList.innerHTML = '';
+        if (res.anomalies && res.anomalies.length > 0) {
+          res.anomalies.forEach(ano => {
+            const item = document.createElement('div');
+            item.className = 'broadcast-anomaly-item';
+            item.innerHTML = `
+              <span class="anomaly-host">${ano.host || 'Host'}:</span>
+              <span>${ano.issue || ''}</span>
+            `;
+            anomaliesList.appendChild(item);
+          });
+          document.getElementById('broadcast-anomalies-section')?.classList.remove('hidden');
+        } else {
+          anomaliesList.innerHTML = '<span style="font-size: 0.82rem; color: #10b981;">✓ Nenhuma discrepância ou erro encontrado em nenhum host.</span>';
+        }
+      }
+
+      const recBox = document.getElementById('broadcast-recommendation-box');
+      if (res.actionRecommended) {
+        const recTextEl = document.getElementById('broadcast-recommendation-text');
+        if (recTextEl) recTextEl.textContent = res.actionRecommended;
+        recBox?.classList.remove('hidden');
+      } else {
+        recBox?.classList.add('hidden');
+      }
+
+      contentEl?.classList.remove('hidden');
+    } catch (err) {
+      loadingEl?.classList.add('hidden');
+      const summaryTextEl = document.getElementById('broadcast-summary-text');
+      if (summaryTextEl) summaryTextEl.textContent = `Falha ao processar resumo: ${err.message}`;
+      contentEl?.classList.remove('hidden');
+    }
+  }
+
+  async openAISettings() {
+    try {
+      const config = await this.callAI('getConfig');
+      if (config) {
+        const selectProvider = document.getElementById('ai-select-provider');
+        if (selectProvider) {
+          selectProvider.value = config.provider || 'gemini';
+          selectProvider.dispatchEvent(new Event('change'));
+        }
+
+        const selectModel = document.getElementById('ai-select-model');
+        if (selectModel && config.model) {
+          selectModel.value = config.model;
+        }
+
+        const inputBaseUrl = document.getElementById('ai-input-baseurl');
+        if (inputBaseUrl) {
+          inputBaseUrl.value = config.baseUrl || '';
+        }
+
+        const checkRedact = document.getElementById('ai-check-redact');
+        if (checkRedact) {
+          checkRedact.checked = config.redactSecrets !== false;
+        }
+
+        const keyPreview = document.getElementById('ai-key-preview-text');
+        if (keyPreview) {
+          keyPreview.textContent = config.hasKey ? `Chave ativa: ${config.keyPreview} (Criptografada)` : 'Nenhuma chave configurada.';
+        }
+
+        const inputKey = document.getElementById('ai-input-apikey');
+        if (inputKey) {
+          inputKey.value = '';
+          inputKey.placeholder = config.hasKey ? '•••••••••••••••• (deixe em branco para manter a atual)' : 'Cole sua chave aqui...';
+        }
+      }
+
+      const testStatus = document.getElementById('ai-test-status');
+      testStatus?.classList.add('hidden');
+
+      this.aiSettingsModalEl?.classList.remove('hidden');
+    } catch (err) {
+      console.error('[Termix AI] Erro ao carregar configurações:', err);
+    }
+  }
+
+  async saveAISettings() {
+    const provider = document.getElementById('ai-select-provider')?.value || 'gemini';
+    const model = document.getElementById('ai-select-model')?.value || 'gemini-2.5-flash';
+    const apiKey = document.getElementById('ai-input-apikey')?.value || '';
+    const baseUrl = document.getElementById('ai-input-baseurl')?.value || '';
+    const redactSecrets = document.getElementById('ai-check-redact')?.checked;
+
+    try {
+      await this.callAI('saveConfig', {
+        provider,
+        model,
+        apiKey,
+        baseUrl,
+        redactSecrets
+      });
+
+      const testStatus = document.getElementById('ai-test-status');
+      if (testStatus) {
+        testStatus.className = 'ai-test-status success';
+        testStatus.textContent = 'Configurações de IA salvas com sucesso!';
+        testStatus.classList.remove('hidden');
+      }
+
+      setTimeout(() => {
+        this.aiSettingsModalEl?.classList.add('hidden');
+      }, 900);
+    } catch (err) {
+      const testStatus = document.getElementById('ai-test-status');
+      if (testStatus) {
+        testStatus.className = 'ai-test-status error';
+        testStatus.textContent = `Erro ao salvar: ${err.message}`;
+        testStatus.classList.remove('hidden');
+      }
+    }
+  }
+
+  async testAIConnection() {
+    const btn = document.getElementById('btn-test-ai-connection');
+    const spinner = btn?.querySelector('.test-spinner');
+    const testStatus = document.getElementById('ai-test-status');
+
+    spinner?.classList.remove('hidden');
+    testStatus?.classList.add('hidden');
+
+    const provider = document.getElementById('ai-select-provider')?.value || 'gemini';
+    const model = document.getElementById('ai-select-model')?.value || 'gemini-2.5-flash';
+    const apiKey = document.getElementById('ai-input-apikey')?.value || '';
+    const baseUrl = document.getElementById('ai-input-baseurl')?.value || '';
+
+    try {
+      const res = await this.callAI('testConnection', {
+        provider,
+        model,
+        apiKey,
+        baseUrl
+      });
+
+      spinner?.classList.add('hidden');
+
+      if (res && res.success) {
+        testStatus.className = 'ai-test-status success';
+        testStatus.textContent = `✓ Conexão bem-sucedida com [${res.provider.toUpperCase()} - ${res.model}]!`;
+      } else {
+        testStatus.className = 'ai-test-status error';
+        testStatus.textContent = `✗ Falha na conexão: ${res?.error || 'Verifique sua chave de API e conexão.'}`;
+      }
+      testStatus?.classList.remove('hidden');
+    } catch (err) {
+      spinner?.classList.add('hidden');
+      if (testStatus) {
+        testStatus.className = 'ai-test-status error';
+        testStatus.textContent = `✗ Erro: ${err.message}`;
+        testStatus?.classList.remove('hidden');
+      }
+    }
+  }
 }
 
 /**
@@ -2092,6 +2732,11 @@ class TerminalInstance {
 
         <div class="terminal-card-tools">
           <span class="term-badge pid-badge">PID: ...</span>
+          <button class="btn-card-tool btn-ai-tool" title="Assistente de IA / Copilot (⌘+I)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"></path>
+            </svg>
+          </button>
           <button class="btn-card-tool btn-max-tool" title="Maximizar / Restaurar">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
@@ -2113,6 +2758,7 @@ class TerminalInstance {
     this.bodyEl = this.cardEl.querySelector('.terminal-body');
     this.titleTextEl = this.cardEl.querySelector('.title-text');
     this.pidBadgeEl = this.cardEl.querySelector('.pid-badge');
+    this.btnAiTool = this.cardEl.querySelector('.btn-ai-tool');
 
     this.bindDomEvents();
   }
@@ -2121,6 +2767,16 @@ class TerminalInstance {
     this.cardEl.addEventListener('click', () => {
       this.dashboard.setActiveTerminal(this.id);
       this.focus();
+    });
+
+    this.btnAiTool?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.dashboard.setActiveTerminal(this.id);
+      if (this.hasExitError) {
+        this.dashboard.openErrorDiagnosis(this.id);
+      } else {
+        this.dashboard.openAICopilot(this.id);
+      }
     });
 
     this.cardEl.querySelector('.dot-close').addEventListener('click', (e) => {
@@ -2274,6 +2930,12 @@ class TerminalInstance {
           this.term.clear();
           return false;
         }
+
+        // Cmd+I / Ctrl+I: Abrir Assistente de IA / Copilot para este terminal
+        if (isCmdOrCtrl && (e.code === 'KeyI' || e.key === 'i' || e.key === 'I')) {
+          this.dashboard.openAICopilot(this.id);
+          return false;
+        }
       }
 
       return true;
@@ -2383,9 +3045,34 @@ class TerminalInstance {
   }
 
   handleExit(exitCode) {
+    this.exitCode = exitCode;
     this.term.writeln(`\r\n\x1b[33m[Processo finalizado com código ${exitCode}]\x1b[0m\r\n`);
     this.pidBadgeEl.textContent = `Encerrado (${exitCode})`;
     this.pidBadgeEl.style.color = '#f43f5e';
+
+    if (exitCode !== 0 && exitCode !== null) {
+      this.hasExitError = true;
+      if (this.btnAiTool) {
+        this.btnAiTool.classList.add('btn-ai-error-pulse');
+        this.btnAiTool.title = `Erro detectado (código ${exitCode}). Clique para diagnosticar com IA!`;
+      }
+    }
+  }
+
+  getRecentOutput(lineCount = 40) {
+    if (!this.term || !this.term.buffer || !this.term.buffer.active) return '';
+    try {
+      const buf = this.term.buffer.active;
+      const lines = [];
+      const start = Math.max(0, buf.length - lineCount);
+      for (let i = start; i < buf.length; i++) {
+        const line = buf.getLine(i);
+        if (line) lines.push(line.translateToString(true));
+      }
+      return lines.join('\n').trim();
+    } catch (_) {
+      return '';
+    }
   }
 
   destroy() {

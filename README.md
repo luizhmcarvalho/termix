@@ -26,7 +26,13 @@ Diferente de alternativas baseadas puramente em navegadores web locais que prend
 ## ✨ Principais Funcionalidades
 
 - **⚡ Pseudoterminais Reais (node-pty):** Criação de instâncias nativas do seu shell padrão (`/bin/zsh`, `bash`, `fish`) com suporte total a PTY, cores ANSI 256/Truecolor e interatividade com programas como `htop`, `vim`, `ssh` e `docker`.
-- **🗂️ Workspaces & Sessões Salvas (Novo!):**
+- **✨ Termix Copilot & IA Integrada (Novo!):**
+  - **Prompt para Comando (NL2CLI):** Pressione <kbd>⌘</kbd> + <kbd>I</kbd> (ou <kbd>⌥</kbd> + <kbd>I</kbd>) para descrever o que deseja executar em linguagem natural; a IA gera o comando exato, contextualizado com o SO, shell e histórico do terminal ativo.
+  - **Diagnóstico de Erros & Auto-Fix:** Detecção inteligente de falhas no terminal com resumo da causa raiz e botão para executar o comando de correção em 1 clique.
+  - **Resumo Inteligente de Broadcast:** Analise saídas simultâneas de dezenas de servidores SSH transmitidos em broadcast com síntese executiva e detecção de discrepâncias.
+  - **Multi-Provedor com Google Gemini:** Suporte nativo a **Google Gemini** (Gemini 2.5/1.5 Flash), **OpenAI**, **Anthropic** e **Ollama / LM Studio** (100% offline e local).
+  - **Segurança & Redaction:** Criptografia AES-256-GCM para chaves de API e mascaramento automático de senhas, tokens e chaves privadas SSH antes do envio ao modelo.
+- **🗂️ Workspaces & Sessões Salvas:**
   - Salve o conjunto atual de terminais abertos (ex: 4 terminais com diretórios específicos, comandos de inicialização, títulos e hosts SSH conectados) como um **Workspace** reutilizável.
   - Botão rápido **"Salvar Sessão Atual"** para capturar tudo o que está em execução no momento.
   - Ao clicar em **"Abrir Workspace"** (<kbd>⌥</kbd> + <kbd>W</kbd>), o Termix restaura todos os terminais do grupo, reconecta aos respectivos hosts/diretórios e reaplica o layout configurado.

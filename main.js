@@ -12,6 +12,7 @@ const fs = require('fs');
 const { app, BrowserWindow, ipcMain, Menu, clipboard } = require('electron');
 const pty = require('node-pty');
 const DatabaseManager = require('./services/db');
+const AIService = require('./services/ai');
 
 // Identificação da plataforma
 const isMac = process.platform === 'darwin';
@@ -82,6 +83,15 @@ function getDatabase() {
   return dbInstance;
 }
 
+// Instância do serviço de Inteligência Artificial
+let aiInstance = null;
+function getAIService() {
+  if (!aiInstance) {
+    aiInstance = new AIService(getDatabase());
+  }
+  return aiInstance;
+}
+
 // Armazenamento das instâncias ativas: Map<terminalId, { id, ptyProcess, title, createdAt }>
 const terminals = new Map();
 
@@ -107,6 +117,12 @@ function createWindow() {
   if (isMac) {
     windowOptions.titleBarStyle = 'hiddenInset';
     windowOptions.trafficLightPosition = { x: 14, y: 14 };
+    if (app.dock) {
+      const iconPath = path.join(__dirname, 'build', 'icon.png');
+      if (fs.existsSync(iconPath)) {
+        app.dock.setIcon(iconPath);
+      }
+    }
   } else if (isWin) {
     // No Windows, titleBarOverlay oferece visual moderno integrado com botões nativos
     windowOptions.titleBarStyle = 'hidden';
@@ -164,8 +180,8 @@ function setupMenu() {
   if (isMac) {
     app.setAboutPanelOptions({
       applicationName: 'Termix',
-      applicationVersion: '1.4.0',
-      version: '1.4.0',
+      applicationVersion: '1.5.0',
+      version: '1.5.0',
       copyright: 'Copyright © 2026 Luiz Carvalho',
       authors: ['Luiz Carvalho'],
       credits: 'Desenvolvido por Luiz Carvalho\nLicença: MIT'
@@ -221,6 +237,15 @@ function setupMenu() {
           click: () => {
             if (mainWindow) {
               mainWindow.webContents.send('menu:new-terminal');
+            }
+          }
+        },
+        {
+          label: 'Assistente de IA (Copilot)',
+          accelerator: 'CmdOrCtrl+I',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu:open-ai-copilot');
             }
           }
         },
@@ -664,6 +689,55 @@ ipcMain.handle('db:workspaces:save', (event, data) => {
 
 ipcMain.handle('db:workspaces:delete', (event, id) => {
   return getDatabase().deleteWorkspace(id);
+});
+
+// IPC: Motor de Inteligência Artificial (Google Gemini, OpenAI, Ollama, Anthropic)
+ipcMain.handle('ai:config:get', () => {
+  return getDatabase().getAIConfig(false);
+});
+
+ipcMain.handle('ai:config:save', (event, data) => {
+  return getDatabase().saveAIConfig(data);
+});
+
+ipcMain.handle('ai:config:test', async (event, data) => {
+  try {
+    return await getAIService().testConnection(data);
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('ai:command:generate', async (event, args) => {
+  try {
+    return await getAIService().generateCommand(args);
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('ai:error:diagnose', async (event, args) => {
+  try {
+    return await getAIService().diagnoseError(args);
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('ai:command:explain', async (event, args) => {
+  try {
+    return await getAIService().explainCommand(args);
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('ai:broadcast:summarize', async (event, args) => {
+  try {
+    return await getAIService().summarizeBroadcast(args);
+  } catch (err) {
+    return { error: err.message };
+  }
 });
 
 // Ciclo de vida do Electron

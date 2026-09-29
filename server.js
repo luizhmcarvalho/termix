@@ -14,6 +14,7 @@ const express = require('express');
 const { WebSocketServer } = require('ws');
 const pty = require('node-pty');
 const DatabaseManager = require('./services/db');
+const AIService = require('./services/ai');
 
 // Identificação de plataforma
 const isMac = process.platform === 'darwin';
@@ -83,6 +84,7 @@ const wss = new WebSocketServer({ server });
 
 // Inicializa banco de dados SQLite local
 const db = new DatabaseManager(path.join(os.homedir(), '.termix'));
+const ai = new AIService(db);
 
 // Middleware para parsing de JSON
 app.use(express.json());
@@ -180,6 +182,65 @@ app.post('/api/workspaces', (req, res) => {
 
 app.delete('/api/workspaces/:id', (req, res) => {
   res.json(db.deleteWorkspace(req.params.id));
+});
+
+// Rotas da API para IA (Termix Copilot)
+app.get('/api/ai/config', (req, res) => {
+  res.json(db.getAIConfig(false));
+});
+
+app.post('/api/ai/config', (req, res) => {
+  try {
+    const saved = db.saveAIConfig(req.body);
+    res.json(saved);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ai/test', async (req, res) => {
+  try {
+    const result = await ai.testConnection(req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ai/generate', async (req, res) => {
+  try {
+    const result = await ai.generateCommand(req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ai/diagnose', async (req, res) => {
+  try {
+    const result = await ai.diagnoseError(req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ai/explain', async (req, res) => {
+  try {
+    const result = await ai.explainCommand(req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ai/broadcast-summary', async (req, res) => {
+  try {
+    const result = await ai.summarizeBroadcast(req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /**

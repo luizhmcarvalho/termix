@@ -101,6 +101,12 @@ contextBridge.exposeInMainWorld('termix', {
     return () => ipcRenderer.removeListener('menu:show-about', handler);
   },
 
+  onOpenAICopilot: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('menu:open-ai-copilot', handler);
+    return () => ipcRenderer.removeListener('menu:open-ai-copilot', handler);
+  },
+
   // Gerenciamento de Hosts e Identidades (SQLite Local com Criptografia)
   hosts: {
     list: () => ipcRenderer.invoke('db:hosts:list'),
@@ -122,5 +128,16 @@ contextBridge.exposeInMainWorld('termix', {
     get: (id) => ipcRenderer.invoke('db:workspaces:get', id),
     save: (data) => ipcRenderer.invoke('db:workspaces:save', data),
     delete: (id) => ipcRenderer.invoke('db:workspaces:delete', id)
+  },
+
+  // Motor de Inteligência Artificial do Termix (Google Gemini, OpenAI, Ollama, Anthropic)
+  ai: {
+    getConfig: () => ipcRenderer.invoke('ai:config:get'),
+    saveConfig: (data) => ipcRenderer.invoke('ai:config:save', data),
+    testConnection: (data) => ipcRenderer.invoke('ai:config:test', data),
+    generateCommand: (args) => ipcRenderer.invoke('ai:command:generate', args),
+    diagnoseError: (args) => ipcRenderer.invoke('ai:error:diagnose', args),
+    explainCommand: (args) => ipcRenderer.invoke('ai:command:explain', args),
+    summarizeBroadcast: (args) => ipcRenderer.invoke('ai:broadcast:summarize', args)
   }
 });
