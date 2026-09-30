@@ -3079,9 +3079,10 @@ class TerminalInstance {
           return true;
         }
 
-        // Cmd+V / Ctrl+V: Colar da área de transferência
+        // Cmd+V / Ctrl+V: Deixar o evento nativo de 'paste' agir
+        // Retornar false impede que o xterm trate a tecla como entrada direta de caractere (ex: '^V' no Linux),
+        // permitindo que o evento nativo DOM 'paste' disparado pelo Electron/navegador seja tratado pelo xterm exatamente uma vez.
         if (isCmdOrCtrl && (e.code === 'KeyV' || e.key === 'v' || e.key === 'V')) {
-          this.pasteFromClipboard();
           return false;
         }
 
@@ -3147,7 +3148,11 @@ class TerminalInstance {
     }
 
     if (text) {
-      this.dashboard.sendInput(this.id, text);
+      if (this.term && typeof this.term.paste === 'function') {
+        this.term.paste(text);
+      } else {
+        this.dashboard.sendInput(this.id, text);
+      }
     }
   }
 
