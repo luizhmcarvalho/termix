@@ -107,6 +107,18 @@ contextBridge.exposeInMainWorld('termix', {
     return () => ipcRenderer.removeListener('menu:open-ai-copilot', handler);
   },
 
+  onOpenBackup: (callback) => {
+    const handler = (event, initialTab) => callback(initialTab);
+    ipcRenderer.on('menu:open-backup', handler);
+    return () => ipcRenderer.removeListener('menu:open-backup', handler);
+  },
+
+  onSetLanguage: (callback) => {
+    const handler = (event, lang) => callback(lang);
+    ipcRenderer.on('menu:set-language', handler);
+    return () => ipcRenderer.removeListener('menu:set-language', handler);
+  },
+
   // Gerenciamento de Hosts e Identidades (SQLite Local com Criptografia)
   hosts: {
     list: () => ipcRenderer.invoke('db:hosts:list'),
@@ -128,6 +140,21 @@ contextBridge.exposeInMainWorld('termix', {
     get: (id) => ipcRenderer.invoke('db:workspaces:get', id),
     save: (data) => ipcRenderer.invoke('db:workspaces:save', data),
     delete: (id) => ipcRenderer.invoke('db:workspaces:delete', id)
+  },
+
+  // Configurações Gerais do Sistema & Idioma
+  settings: {
+    get: (key) => ipcRenderer.invoke('db:settings:get', key),
+    save: (key, value) => ipcRenderer.invoke('db:settings:save', { key, value })
+  },
+
+  // Exportação e Importação de Configurações e Credenciais
+  config: {
+    export: (options) => ipcRenderer.invoke('db:config:export', options),
+    import: (payload, options) => ipcRenderer.invoke('db:config:import', { payload, options }),
+    preview: (payload, password) => ipcRenderer.invoke('db:config:preview', { payload, password }),
+    saveExportFile: (content, defaultFilename) => ipcRenderer.invoke('dialog:save-export-file', { content, defaultFilename }),
+    openImportFile: () => ipcRenderer.invoke('dialog:open-import-file')
   },
 
   // Motor de Inteligência Artificial do Termix (Google Gemini, OpenAI, Ollama, Anthropic)

@@ -125,20 +125,17 @@ class DatabaseManager {
   saveIdentity(data) {
     const now = new Date().toISOString();
     const id = data.id || `id-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const isNew = !data.id;
+    const existing = this.db.prepare('SELECT password_enc, key_passphrase_enc, certificate_enc FROM identities WHERE id = ?').get(id);
+    const isNew = !existing;
 
     let passwordEnc = null;
     let passphraseEnc = null;
     let certificateEnc = null;
 
-    if (!isNew) {
-      // Mantém criptografia anterior caso novo segredo não seja fornecido
-      const existing = this.db.prepare('SELECT password_enc, key_passphrase_enc, certificate_enc FROM identities WHERE id = ?').get(id);
-      if (existing) {
-        passwordEnc = existing.password_enc;
-        passphraseEnc = existing.key_passphrase_enc;
-        certificateEnc = existing.certificate_enc;
-      }
+    if (!isNew && existing) {
+      passwordEnc = existing.password_enc;
+      passphraseEnc = existing.key_passphrase_enc;
+      certificateEnc = existing.certificate_enc;
     }
 
     if (data.password !== undefined && data.password !== '') {
@@ -307,7 +304,8 @@ class DatabaseManager {
   saveHost(data) {
     const now = new Date().toISOString();
     const id = data.id || `host-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const isNew = !data.id;
+    const existing = this.db.prepare('SELECT id FROM hosts WHERE id = ?').get(id);
+    const isNew = !existing;
 
     const tagsStr = Array.isArray(data.tags) 
       ? data.tags.join(',') 
@@ -407,12 +405,13 @@ class DatabaseManager {
 
   saveWorkspace(data) {
     const now = new Date().toISOString();
-    let id = data.id;
+    const id = data.id || `ws-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const existing = this.db.prepare('SELECT id FROM workspaces WHERE id = ?').get(id);
+    const isNew = !existing;
 
     const terminalsJson = JSON.stringify(data.terminals || []);
 
-    if (!id) {
-      id = `ws-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    if (isNew) {
       const stmt = this.db.prepare(`
         INSERT INTO workspaces (id, name, layout, color, description, terminals_json, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -646,6 +645,420 @@ class DatabaseManager {
 
     this.saveSetting('ai_config', newConfig);
     return this.getAIConfig(false);
+  }
+
+  // --- EXPORTAÇÃO E IMPORTAÇÃO DE CONFIGURAÇÕES E CREDENCIAIS ---
+
+  /**
+   * Exporta dados do Termix (Hosts, Identidades, Workspaces, Configurações de IA e Preferências)
+   * Suporta exportação criptografada com senha (AES-256-GCM + PBKDF2) ou JSON puro
+   * @param {Object} options
+   * @returns {Object} Bundle de backup pronto para salvar em arquivo
+   */
+  exportData(options = {}) {
+    const {
+      includeHosts = true,
+      includeIdentities = true,
+      includeCredentials = true,
+      includeWorkspaces = true,
+      includeSettings = true,
+      password = null
+    } = options;
+
+    const exportedAt = new Date().toISOString();
+    const items = {};
+
+    if (includeIdentities) {
+      const rows = this.db.prepare('SELECT * FROM identities ORDER BY name ASC').all();
+      items.identities = rows.map(r => {
+        const item = {
+          id: r.id,
+          name: r.name,
+          username: r.username,
+          auth_type: r.auth_type,
+          key_path: r.key_path,
+          created_at: r.created_at,
+          updated_at: r.updated_at
+        };
+
+        if (includeCredentials) {
+          item.password = this.crypto.decrypt(r.password_enc) || '';
+          item.passphrase = this.crypto.decrypt(r.key_passphrase_enc) || '';
+          item.certificate = this.crypto.decrypt(r.certificate_enc) || '';
+        }
+
+        return item;
+      });
+    }
+
+    if (includeHosts) {
+      items.hosts = this.getHosts();
+    }
+
+    if (includeWorkspaces) {
+      items.workspaces = this.getWorkspaces();
+    }
+
+    if (includeSettings) {
+      const aiConfig = this.getAIConfig(includeCredentials);
+      const appLanguage = this.getSetting('app_language') || 'pt';
+      const appTheme = this.getSetting('app_theme') || 'dark';
+
+      items.settings = {
+        app_language: appLanguage,
+        app_theme: appTheme,
+        ai_config: {
+          provider: aiConfig.provider,
+          model: aiConfig.model,
+          region: aiConfig.region,
+          baseUrl: aiConfig.baseUrl,
+          redactSecrets: aiConfig.redactSecrets,
+          autoSuggestOnExitError: aiConfig.autoSuggestOnExitError,
+          savedModels: aiConfig.savedModels,
+          savedRegions: aiConfig.savedRegions,
+          savedBaseUrls: aiConfig.savedBaseUrls,
+          ...(includeCredentials ? {
+            apiKey: aiConfig.apiKey,
+            keys_decrypted: aiConfig.keys_decrypted
+          } : {})
+        }
+      };
+    }
+
+    const counts = {
+      hosts: items.hosts ? items.hosts.length : 0,
+      identities: items.identities ? items.identities.length : 0,
+      workspaces: items.workspaces ? items.workspaces.length : 0,
+      hasSettings: Boolean(items.settings),
+      hasCredentials: Boolean(includeCredentials)
+    };
+
+    // Caso o usuário defina uma senha de criptografia para o backup
+    if (password && typeof password === 'string' && password.trim()) {
+      const encryptedBundle = this.crypto.encryptWithPassword(JSON.stringify(items), password.trim());
+      return {
+        type: 'termix_backup',
+        version: '1.6.0',
+        encrypted: true,
+        exported_at: exportedAt,
+        counts,
+        salt: encryptedBundle.salt,
+        iv: encryptedBundle.iv,
+        tag: encryptedBundle.tag,
+        ciphertext: encryptedBundle.ciphertext
+      };
+    }
+
+    // Exportação aberta em JSON puro
+    return {
+      type: 'termix_backup',
+      version: '1.6.0',
+      encrypted: false,
+      exported_at: exportedAt,
+      counts,
+      data: items
+    };
+  }
+
+  /**
+   * Pré-visualiza um arquivo de backup antes da importação
+   * @param {Object|string} payload
+   * @param {string} password
+   */
+  previewImport(payload, password = null) {
+    let parsed = payload;
+    if (typeof parsed === 'string') {
+      try {
+        parsed = JSON.parse(parsed);
+      } catch (_) {
+        throw new Error('Arquivo de backup inválido: formato JSON corrompido.');
+      }
+    }
+
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('Arquivo de backup inválido ou vazio.');
+    }
+
+    const isEncrypted = Boolean(parsed.encrypted);
+    const exportedAt = parsed.exported_at || null;
+    const version = parsed.version || '1.0';
+
+    if (isEncrypted) {
+      if (!password) {
+        return {
+          valid: true,
+          encrypted: true,
+          exported_at: exportedAt,
+          version,
+          counts: parsed.counts || { hosts: 0, identities: 0, workspaces: 0 },
+          needsPassword: true
+        };
+      }
+
+      try {
+        const decryptedStr = this.crypto.decryptWithPassword(parsed, password.trim());
+        const items = JSON.parse(decryptedStr);
+        return {
+          valid: true,
+          encrypted: true,
+          exported_at: exportedAt,
+          timestamp: exportedAt,
+          version,
+          needsPassword: false,
+          passwordValid: true,
+          counts: {
+            hosts: Array.isArray(items.hosts) ? items.hosts.length : 0,
+            identities: Array.isArray(items.identities) ? items.identities.length : 0,
+            workspaces: Array.isArray(items.workspaces) ? items.workspaces.length : 0,
+            hasSettings: Boolean(items.settings)
+          },
+          summary: {
+            hostNames: (items.hosts || []).map(h => h.name).slice(0, 5),
+            identityNames: (items.identities || []).map(i => i.name).slice(0, 5),
+            workspaceNames: (items.workspaces || []).map(w => w.name).slice(0, 5)
+          }
+        };
+      } catch (_) {
+        return {
+          valid: true,
+          encrypted: true,
+          exported_at: exportedAt,
+          version,
+          needsPassword: true,
+          passwordValid: false,
+          counts: parsed.counts || { hosts: 0, identities: 0, workspaces: 0 },
+          error: 'Senha incorreta para descriptografia do arquivo de backup.'
+        };
+      }
+    }
+
+    const items = parsed.data || parsed.items || parsed;
+    return {
+      valid: true,
+      encrypted: false,
+      exported_at: exportedAt,
+      timestamp: exportedAt,
+      version,
+      needsPassword: false,
+      counts: {
+        hosts: Array.isArray(items.hosts) ? items.hosts.length : 0,
+        identities: Array.isArray(items.identities) ? items.identities.length : 0,
+        workspaces: Array.isArray(items.workspaces) ? items.workspaces.length : 0,
+        hasSettings: Boolean(items.settings)
+      },
+      summary: {
+        hostNames: (items.hosts || []).map(h => h.name).slice(0, 5),
+        identityNames: (items.identities || []).map(i => i.name).slice(0, 5),
+        workspaceNames: (items.workspaces || []).map(w => w.name).slice(0, 5)
+      }
+    };
+  }
+
+  /**
+   * Importa e restaura configurações, credenciais, hosts e workspaces
+   * Re-criptografa segredos com a chave mestra nativa da máquina atual
+   * @param {Object|string} payload
+   * @param {Object} options
+   */
+  importData(payload, options = {}) {
+    const {
+      password = null,
+      mode = 'merge', // 'merge' | 'add_new' | 'replace'
+      importHosts = true,
+      importIdentities = true,
+      importWorkspaces = true,
+      importSettings = true
+    } = options;
+
+    let parsed = payload;
+    if (typeof parsed === 'string') {
+      try {
+        parsed = JSON.parse(parsed);
+      } catch (_) {
+        throw new Error('Arquivo de backup inválido: não é um JSON válido.');
+      }
+    }
+
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('Arquivo de backup inválido ou vazio.');
+    }
+
+    let items = null;
+
+    if (parsed.encrypted) {
+      if (!password || !password.trim()) {
+        throw new Error('Este arquivo está protegido com senha. Informe a senha de descriptografia.');
+      }
+      try {
+        const decryptedStr = this.crypto.decryptWithPassword(parsed, password.trim());
+        items = JSON.parse(decryptedStr);
+      } catch (err) {
+        throw new Error('Falha ao descriptografar: Senha incorreta ou arquivo adulterado.');
+      }
+    } else {
+      items = parsed.data || parsed.items || parsed;
+    }
+
+    if (!items || typeof items !== 'object') {
+      throw new Error('Nenhum dado válido encontrado no arquivo de backup.');
+    }
+
+    const result = {
+      hosts: 0,
+      identities: 0,
+      workspaces: 0,
+      settings: false
+    };
+
+    // Modo Substituir Tudo (Replace): limpa tabelas antes de restaurar
+    if (mode === 'replace') {
+      if (importHosts && importIdentities) {
+        this.db.exec('DELETE FROM hosts;');
+        this.db.exec('DELETE FROM identities;');
+      } else if (importHosts) {
+        this.db.exec('DELETE FROM hosts;');
+      } else if (importIdentities) {
+        this.db.exec('DELETE FROM identities;');
+      }
+      if (importWorkspaces) {
+        this.db.exec('DELETE FROM workspaces;');
+      }
+    }
+
+    // 1. Importa Identidades (Primeiro, pois Hosts dependem de identity_id)
+    const identityIdMap = new Map(); // oldId -> newId
+
+    if (importIdentities && Array.isArray(items.identities)) {
+      for (const idData of items.identities) {
+        let targetId = idData.id;
+
+        if (mode === 'add_new') {
+          targetId = `id-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+          identityIdMap.set(idData.id, targetId);
+        } else if (mode === 'merge') {
+          // Se for merge e não tiver id, gera um
+          if (!targetId) {
+            targetId = `id-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+          }
+        }
+
+        this.saveIdentity({
+          id: targetId,
+          name: idData.name,
+          username: idData.username,
+          auth_type: idData.auth_type,
+          password: idData.password,
+          key_path: idData.key_path,
+          passphrase: idData.passphrase,
+          certificate: idData.certificate
+        });
+        result.identities++;
+      }
+    }
+
+    // 2. Importa Hosts
+    if (importHosts && Array.isArray(items.hosts)) {
+      for (const hostData of items.hosts) {
+        let targetId = hostData.id;
+        if (mode === 'add_new' || !targetId) {
+          targetId = `host-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        }
+
+        let assignedIdentityId = hostData.identity_id;
+        if (assignedIdentityId && identityIdMap.has(assignedIdentityId)) {
+          assignedIdentityId = identityIdMap.get(assignedIdentityId);
+        }
+
+        this.saveHost({
+          id: targetId,
+          name: hostData.name,
+          host_type: hostData.host_type,
+          hostname: hostData.hostname,
+          port: hostData.port,
+          identity_id: assignedIdentityId,
+          default_path: hostData.default_path,
+          startup_command: hostData.startup_command,
+          tags: hostData.tags,
+          color: hostData.color
+        });
+        result.hosts++;
+      }
+    }
+
+    // 3. Importa Workspaces
+    if (importWorkspaces && Array.isArray(items.workspaces)) {
+      for (const wsData of items.workspaces) {
+        let targetId = wsData.id;
+        if (mode === 'add_new' || !targetId) {
+          targetId = `ws-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        }
+
+        this.saveWorkspace({
+          id: targetId,
+          name: wsData.name,
+          layout: wsData.layout,
+          color: wsData.color,
+          description: wsData.description,
+          terminals: wsData.terminals || []
+        });
+        result.workspaces++;
+      }
+    }
+
+    // 4. Importa Configurações Gerais e de IA
+    if (importSettings && items.settings) {
+      if (items.settings.app_language) {
+        this.saveSetting('app_language', items.settings.app_language);
+      }
+      if (items.settings.app_theme) {
+        this.saveSetting('app_theme', items.settings.app_theme);
+      }
+
+      if (items.settings.ai_config) {
+        const incoming = items.settings.ai_config;
+        const current = this.getAIConfig(true);
+
+        const mergedDecryptedKeys = {
+          ...(current.keys_decrypted || {}),
+          ...(incoming.keys_decrypted || {})
+        };
+        if (incoming.apiKey && incoming.provider && !mergedDecryptedKeys[incoming.provider]) {
+          mergedDecryptedKeys[incoming.provider] = incoming.apiKey;
+        }
+
+        const newAIConfig = {
+          provider: incoming.provider || current.provider || 'gemini',
+          model: incoming.model || current.model,
+          region: incoming.region || current.region,
+          baseUrl: incoming.baseUrl !== undefined ? incoming.baseUrl : current.baseUrl,
+          redactSecrets: incoming.redactSecrets !== undefined ? incoming.redactSecrets : current.redactSecrets,
+          autoSuggestOnExitError: incoming.autoSuggestOnExitError !== undefined ? incoming.autoSuggestOnExitError : current.autoSuggestOnExitError,
+          models: { ...(current.savedModels || {}), ...(incoming.savedModels || {}) },
+          regions: { ...(current.savedRegions || {}), ...(incoming.savedRegions || {}) },
+          baseUrls: { ...(current.savedBaseUrls || {}), ...(incoming.savedBaseUrls || {}) }
+        };
+
+        const keysEnc = {};
+        for (const [p, k] of Object.entries(mergedDecryptedKeys)) {
+          if (k && typeof k === 'string' && k.trim() && !k.includes('••••') && !k.includes('...')) {
+            keysEnc[p] = this.crypto.encrypt(k.trim());
+          }
+        }
+        newAIConfig.keys_enc = keysEnc;
+        if (keysEnc[newAIConfig.provider]) {
+          newAIConfig.apiKey_enc = keysEnc[newAIConfig.provider];
+        }
+
+        this.saveSetting('ai_config', newAIConfig);
+      }
+      result.settings = true;
+    }
+
+    return {
+      success: true,
+      counts: result,
+      imported: result
+    };
   }
 }
 

@@ -9,7 +9,7 @@ require('./fix-permissions');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
-const { app, BrowserWindow, ipcMain, Menu, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, clipboard, dialog } = require('electron');
 const pty = require('node-pty');
 const DatabaseManager = require('./services/db');
 const AIService = require('./services/ai');
@@ -180,8 +180,8 @@ function setupMenu() {
   if (isMac) {
     app.setAboutPanelOptions({
       applicationName: 'Termix',
-      applicationVersion: '1.5.0',
-      version: '1.5.0',
+      applicationVersion: '1.6.0',
+      version: '1.6.0',
       copyright: 'Copyright © 2026 Luiz Carvalho',
       authors: ['Luiz Carvalho'],
       credits: 'Desenvolvido por Luiz Carvalho\nLicença: MIT'
@@ -213,6 +213,31 @@ function setupMenu() {
           ]
         }]
       : []),
+    {
+      label: 'Arquivo',
+      submenu: [
+        {
+          label: 'Exportar Configurações e Credenciais...',
+          accelerator: 'CmdOrCtrl+Shift+E',
+          click: () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('menu:open-backup', 'export');
+            }
+          }
+        },
+        {
+          label: 'Importar Configurações e Credenciais...',
+          accelerator: 'CmdOrCtrl+Shift+I',
+          click: () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('menu:open-backup', 'import');
+            }
+          }
+        },
+        { type: 'separator' },
+        { role: isMac ? 'close' : 'quit', label: isMac ? 'Fechar Janela' : 'Sair' }
+      ]
+    },
     {
       label: 'Editar',
       submenu: [
@@ -310,6 +335,35 @@ function setupMenu() {
               { role: 'front', label: 'Trazer Todas para Frente' }
             ]
           : [])
+      ]
+    },
+    {
+      label: 'Idioma',
+      submenu: [
+        {
+          label: '🇧🇷 Português (Brasil)',
+          click: () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('menu:set-language', 'pt');
+            }
+          }
+        },
+        {
+          label: '🇺🇸 English',
+          click: () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('menu:set-language', 'en');
+            }
+          }
+        },
+        {
+          label: '🇪🇸 Español',
+          click: () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('menu:set-language', 'es');
+            }
+          }
+        }
       ]
     },
     {
@@ -737,6 +791,99 @@ ipcMain.handle('ai:broadcast:summarize', async (event, args) => {
     return await getAIService().summarizeBroadcast(args);
   } catch (err) {
     return { error: err.message };
+  }
+});
+
+// IPC: Configurações Gerais do Sistema & Idioma
+ipcMain.handle('db:settings:get', (event, key) => {
+  return getDatabase().getSetting(key);
+});
+
+ipcMain.handle('db:settings:save', (event, { key, value }) => {
+  return getDatabase().saveSetting(key, value);
+});
+
+// IPC: Exportação e Importação de Configurações e Credenciais
+ipcMain.handle('db:config:export', (event, options = {}) => {
+  try {
+    return getDatabase().exportData(options);
+  } catch (err) {
+    console.error('[Termix Electron] Erro ao exportar dados:', err);
+    throw err;
+  }
+});
+
+ipcMain.handle('db:config:import', (event, { payload, options = {} }) => {
+  try {
+    return getDatabase().importData(payload, options);
+  } catch (err) {
+    console.error('[Termix Electron] Erro ao importar dados:', err);
+    throw err;
+  }
+});
+
+ipcMain.handle('db:config:preview', (event, { payload, password }) => {
+  try {
+    return getDatabase().previewImport(payload, password);
+  } catch (err) {
+    console.error('[Termix Electron] Erro ao pré-visualizar backup:', err);
+    throw err;
+  }
+});
+
+// IPC: Diálogos Nativos do Sistema Operacional para Salvar e Abrir Arquivos de Backup
+ipcMain.handle('dialog:save-export-file', async (event, { content, defaultFilename }) => {
+  try {
+    const defaultPath = path.join(app.getPath('downloads'), defaultFilename || 'termix-backup.termix');
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Exportar Configurações e Credenciais do Termix',
+      defaultPath,
+      filters: [
+        { name: 'Termix Backup (*.termix)', extensions: ['termix'] },
+        { name: 'JSON Backup (*.json)', extensions: ['json'] },
+        { name: 'Todos os Arquivos', extensions: ['*'] }
+      ]
+    });
+
+    if (!canceled && filePath) {
+      const fileData = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+      fs.writeFileSync(filePath, fileData, 'utf8');
+      return { success: true, filePath, fileName: path.basename(filePath) };
+    }
+    return { canceled: true };
+  } catch (err) {
+    console.error('[Termix Electron] Erro no diálogo de salvar arquivo:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('dialog:open-import-file', async () => {
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Selecionar Arquivo de Backup do Termix',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Arquivos Termix & JSON (*.termix, *.json)', extensions: ['termix', 'json'] },
+        { name: 'Todos os Arquivos', extensions: ['*'] }
+      ]
+    });
+
+    if (!canceled && filePaths && filePaths.length > 0) {
+      const targetPath = filePaths[0];
+      const rawContent = fs.readFileSync(targetPath, 'utf8');
+      const stats = fs.statSync(targetPath);
+      return {
+        success: true,
+        fileName: path.basename(targetPath),
+        filePath: targetPath,
+        sizeBytes: stats.size,
+        content: rawContent
+      };
+    }
+    return { canceled: true };
+  } catch (err) {
+    console.error('[Termix Electron] Erro no diálogo de abrir arquivo:', err);
+    return { success: false, error: err.message };
   }
 });
 

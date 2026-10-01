@@ -1405,6 +1405,152 @@ kbd {
   border-radius: var(--radius-sm);
 }
 
+/* Barra de Chips Rápidos de Tags */
+.hosts-tag-chips-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 10px 2px;
+  margin-bottom: 6px;
+  scrollbar-width: thin;
+}
+
+.hosts-tag-chips-bar:empty {
+  display: none;
+}
+
+.hosts-tag-chips-bar::-webkit-scrollbar {
+  height: 4px;
+}
+
+.hosts-tag-chips-bar::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 4px;
+}
+
+.tag-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.tag-chip-btn:hover {
+  border-color: var(--primary);
+  color: var(--text-main);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.tag-chip-btn.active {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+}
+
+.tag-chip-count {
+  font-size: 0.68rem;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 6px;
+  border-radius: 9999px;
+  color: inherit;
+}
+
+/* Modo Agrupado de Hosts */
+#hosts-list.is-grouped {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.host-group-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-md);
+  padding: 10px 12px 14px 12px;
+  transition: border-color var(--transition-fast);
+}
+
+.host-group-section:hover {
+  border-color: rgba(56, 189, 248, 0.2);
+}
+
+.host-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.host-group-header:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.host-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.host-group-badge-icon {
+  font-size: 1rem;
+}
+
+.host-group-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-main);
+  letter-spacing: 0.01em;
+}
+
+.host-group-count-pill {
+  font-size: 0.68rem;
+  font-weight: 600;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.host-group-toggle-icon {
+  color: var(--text-dim);
+  transition: transform var(--transition-fast);
+}
+
+.host-group-section.collapsed .host-group-toggle-icon {
+  transform: rotate(-90deg);
+}
+
+.host-group-section.collapsed .host-group-cards-grid {
+  display: none;
+}
+
+.host-group-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 12px;
+}
+
 .hosts-cards-grid,
 .identities-cards-grid {
   display: grid;
@@ -1540,8 +1686,19 @@ kbd {
   font-size: 0.68rem;
   color: var(--text-dim);
   background: rgba(255, 255, 255, 0.05);
-  padding: 2px 6px;
+  border: 1px solid transparent;
+  padding: 2px 7px;
   border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.host-tag:hover {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.35);
+  transform: translateY(-1px);
 }
 
 .host-card-actions,
@@ -2676,4 +2833,487 @@ kbd {
   border-color: #cbd5e1;
   color: #475569;
 }
+
+/* ============================================================
+   SELETOR DE IDIOMA (LANGUAGE SELECTOR)
+============================================================ */
+
+.language-dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+
+.btn-language-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-language-trigger:hover {
+  color: var(--text-main);
+  background: var(--bg-hover);
+  border-color: var(--border-subtle);
+}
+
+.active-language-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.language-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  min-width: 175px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+  z-index: 210;
+  animation: dropdownAnim 0.15s ease-out;
+}
+
+[data-theme="light"] .language-dropdown-menu {
+  background-color: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+}
+
+.language-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition-fast);
+}
+
+.language-dropdown-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.language-dropdown-item.active {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+[data-theme="light"] .language-dropdown-item.active {
+  background-color: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+}
+
+.lang-flag {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.lang-name {
+  flex: 1;
+}
+
+/* ============================================================
+   MODAL DE BACKUP (EXPORTAR & IMPORTAR CONFIGS E CREDENCIAIS)
+============================================================ */
+
+.backup-modal-tabs {
+  padding: 0 24px;
+  margin-top: 14px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  gap: 10px;
+}
+
+.backup-modal-body {
+  padding: 20px 24px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.backup-form-step {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.backup-step-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-main);
+  letter-spacing: 0.2px;
+}
+
+/* Grid de checkboxes de seleção de dados */
+.backup-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.backup-checkbox-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.backup-checkbox-card:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--border-focus);
+}
+
+.backup-checkbox-card input[type="checkbox"] {
+  margin-top: 3px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.checkbox-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.checkbox-card-title {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.checkbox-card-desc {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* Opções de Criptografia e Segurança */
+.backup-security-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.security-option-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.security-option-card:hover {
+  background-color: var(--bg-hover);
+}
+
+.security-option-card.active {
+  border-color: var(--accent-primary);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.security-option-card input[type="radio"] {
+  margin-top: 3px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.security-card-content {
+  flex: 1;
+}
+
+.security-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.badge-recommended {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.export-password-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-top: 4px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.export-plain-box {
+  padding: 10px 14px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-sm);
+  margin-top: 4px;
+}
+
+/* Área de Dropzone de Importação */
+.backup-dropzone {
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 28px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  background-color: var(--bg-card);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.backup-dropzone:hover,
+.backup-dropzone.drag-over {
+  border-color: var(--accent-primary);
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.dropzone-icon {
+  color: var(--accent-primary);
+}
+
+.dropzone-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.dropzone-subtitle {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+/* Card de arquivo carregado */
+.import-file-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--accent-emerald);
+  border-radius: var(--radius-md);
+  margin-top: 10px;
+}
+
+.file-card-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.file-card-icon {
+  font-size: 1.3rem;
+}
+
+.file-card-meta {
+  display: block;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.btn-remove-file {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  transition: all var(--transition-fast);
+}
+
+.btn-remove-file:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.encrypted-notice-badge {
+  padding: 8px 12px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-sm);
+  color: #fbbf24;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.import-preview-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+  color: var(--text-main);
+}
+
+.preview-date {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.preview-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.preview-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.preview-pill strong {
+  color: var(--accent-primary);
+}
+
+.import-mode-select {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.radio-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.radio-label:hover {
+  background-color: var(--bg-hover);
+}
+
+.radio-label input[type="radio"] {
+  margin-top: 3px;
+  accent-color: var(--accent-primary);
+}
+
+.backup-status-box {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  margin-top: 12px;
+}
+
+.backup-status-box.status-success {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+.backup-status-box.status-error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #f87171;
+}
+
+.settings-backup-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  margin-top: 14px;
+}
+
+.settings-backup-info h4 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+/* Suporte ao Modo Claro (Light Mode) para Backup */
+[data-theme="light"] .backup-checkbox-card,
+[data-theme="light"] .security-option-card,
+[data-theme="light"] .backup-dropzone,
+[data-theme="light"] .import-file-card,
+[data-theme="light"] .import-preview-box,
+[data-theme="light"] .radio-label,
+[data-theme="light"] .settings-backup-section {
+  background-color: #ffffff;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .export-password-box {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .preview-pill {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .encrypted-notice-badge {
+  background: rgba(217, 119, 6, 0.1);
+  border-color: rgba(217, 119, 6, 0.3);
+  color: #b45309;
+}
+
 

@@ -243,6 +243,53 @@ app.post('/api/ai/broadcast-summary', async (req, res) => {
   }
 });
 
+// Rotas da API para Configurações Gerais e Idioma
+app.get('/api/settings/:key', (req, res) => {
+  try {
+    const value = db.getSetting(req.params.key);
+    res.json({ value });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/settings/:key', (req, res) => {
+  try {
+    const saved = db.saveSetting(req.params.key, req.body.value);
+    res.json({ success: true, value: saved });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Rotas da API para Exportação e Importação de Configurações e Credenciais
+app.post('/api/config/export', (req, res) => {
+  try {
+    const bundle = db.exportData(req.body);
+    res.json(bundle);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/config/preview', (req, res) => {
+  try {
+    const preview = db.previewImport(req.body.payload, req.body.password);
+    res.json(preview);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/config/import', (req, res) => {
+  try {
+    const result = db.importData(req.body.payload, req.body.options);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /**
  * Cria uma nova instância de terminal pseudoterminal (node-pty)
  */

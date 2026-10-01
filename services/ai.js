@@ -112,6 +112,19 @@ function redactSensitiveData(text) {
 }
 
 /**
+ * Retorna instrução de diretriz de idioma para os prompts de sistema da IA
+ */
+function getLanguageInstruction(lang) {
+  if (lang === 'en') {
+    return 'Language rule: Provide all explanations, diagnoses, and descriptions strictly in English.';
+  }
+  if (lang === 'es') {
+    return 'Regla de idioma: Proporcione todas las explicaciones, diagnósticos y descripciones estrictamente en español.';
+  }
+  return 'Regra de idioma: Forneça todas as explicações, diagnósticos e descrições estritamente em português do Brasil.';
+}
+
+/**
  * Remove blocos de markdown ```json ... ``` se o modelo retornar com tags
  */
 function extractJsonFromText(rawText) {
@@ -509,6 +522,7 @@ class AIService {
     }
 
     const config = this.getConfig();
+    const lang = context.language || this.db?.getSetting('app_language') || 'pt';
     let sanitizedPrompt = prompt.trim();
     if (config.redactSecrets) {
       sanitizedPrompt = redactSensitiveData(sanitizedPrompt);
@@ -516,10 +530,11 @@ class AIService {
 
     const systemPrompt = `Você é o Copilot de IA do Termix, um aplicativo multi-terminal avançado para macOS, Linux e servidores SSH.
 O usuário descreverá em linguagem natural o que deseja fazer.
+${getLanguageInstruction(lang)}
 Você deve responder ESTRITAMENTE em formato JSON com a seguinte estrutura:
 {
   "command": "string contendo o comando exato pronto para o shell (sem crases, sem prefixo $)",
-  "explanation": "explicação concisa em português do que o comando faz e suas flags principais",
+  "explanation": "explicação concisa do que o comando faz e suas flags principais no idioma solicitado",
   "isDangerous": true/false (true se puder apagar arquivos, matar processos vitais, reiniciar máquina ou sobrescrever dados),
   "riskWarning": "aviso claro do risco se for perigoso, ou null se for seguro"
 }
@@ -576,6 +591,7 @@ Pedido do Usuário:
    */
   async diagnoseError({ command = '', errorText = '', exitCode = null, context = {} }) {
     const config = this.getConfig();
+    const lang = context.language || this.db?.getSetting('app_language') || 'pt';
     let sanitizedError = errorText || '';
     if (config.redactSecrets) {
       sanitizedError = redactSensitiveData(sanitizedError);
@@ -583,9 +599,10 @@ Pedido do Usuário:
 
     const systemPrompt = `Você é um engenheiro sênior DevOps de troubleshooting integrado ao Termix.
 Um comando falhou no terminal do usuário. Analise a saída do erro, o código de saída e o comando executado.
+${getLanguageInstruction(lang)}
 Você deve responder ESTRITAMENTE em formato JSON com a seguinte estrutura:
 {
-  "diagnosis": "resumo objetivo em 1 ou 2 frases em português explicando exatamente porque a falha ocorreu",
+  "diagnosis": "resumo objetivo em 1 ou 2 frases explicando exatamente porque a falha ocorreu",
   "rootCause": "categoria do erro (ex: 'Porta em Uso', 'Permissão Negada', 'Dependência Ausente', 'Erro de Sintaxe', 'Timeout')",
   "fixCommand": "comando de correção pronto para ser executado no terminal, ou null se não houver um comando único de fix",
   "explanation": "explicação de como a correção resolve o problema",
@@ -632,12 +649,14 @@ ${sanitizedError.slice(-3000)}`;
   /**
    * Feature 3: Explicação de Comandos
    */
-  async explainCommand({ command }) {
+  async explainCommand({ command, context = {} }) {
     if (!command || !command.trim()) {
       throw new Error('Comando vazio.');
     }
 
-    const systemPrompt = `Você é um instrutor Unix/DevOps. Explique o comando fornecido em detalhes e em bom português.
+    const lang = context.language || this.db?.getSetting('app_language') || 'pt';
+    const systemPrompt = `Você é um instrutor Unix/DevOps. Explique o comando fornecido em detalhes.
+${getLanguageInstruction(lang)}
 Responda ESTRITAMENTE em formato JSON:
 {
   "summary": "resumo geral do que o comando faz em 1 frase",
@@ -662,8 +681,9 @@ Responda ESTRITAMENTE em formato JSON:
   /**
    * Feature 4: Sumarização Inteligente de Broadcast Multi-Terminal
    */
-  async summarizeBroadcast({ broadcastCommand, outputs = [] }) {
+  async summarizeBroadcast({ broadcastCommand, outputs = [], context = {} }) {
     const config = this.getConfig();
+    const lang = context.language || this.db?.getSetting('app_language') || 'pt';
 
     const sanitizedOutputs = outputs.map(item => ({
       title: item.title,
@@ -675,9 +695,10 @@ Responda ESTRITAMENTE em formato JSON:
     const systemPrompt = `Você é um orquestrador de operações de infraestrutura e DevOps integrado ao Termix.
 O usuário executou um comando via Broadcast simultâneo em múltiplos terminais/servidores.
 Analise a resposta de cada terminal e compare os resultados.
+${getLanguageInstruction(lang)}
 Responda ESTRITAMENTE em formato JSON com a seguinte estrutura:
 {
-  "summary": "resumo executivo do resultado geral do broadcast (ex: 'Todos os 5 hosts completaram a tarefa com sucesso' ou '4 de 5 hosts responderam OK, 1 falhou')",
+  "summary": "resumo executivo do resultado geral do broadcast",
   "totalHosts": número,
   "successfulHosts": número,
   "failedHosts": número,
@@ -701,6 +722,14 @@ ${JSON.stringify(sanitizedOutputs, null, 2)}`;
     });
 
     return extractJsonFromText(rawResult);
+  }
+
+  getLanguageInstruction(lang) {
+    return getLanguageInstruction(lang);
+  }
+
+  static getLanguageInstruction(lang) {
+    return getLanguageInstruction(lang);
   }
 }
 

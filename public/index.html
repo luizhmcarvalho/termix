@@ -134,10 +134,19 @@
         </button>
 
         <!-- Configurações de IA -->
-        <button id="btn-open-ai-settings" class="btn-topbar-icon" title="Configurações de IA (Google Gemini, OpenAI, Anthropic, DeepSeek, NVIDIA, AWS Bedrock, Ollama)" type="button">
+        <button id="btn-open-ai-settings" class="btn-topbar-icon" data-i18n-title="btn_ai_settings_title" title="Configurações de IA & Preferências" type="button">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"></circle>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+
+        <!-- Exportar / Importar Configurações e Credenciais (Backup) -->
+        <button id="btn-open-backup" class="btn-topbar-icon" data-i18n-title="btn_backup_title" title="Exportar e Importar Configurações e Credenciais (Alt + E)" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
           </svg>
         </button>
 
@@ -145,15 +154,44 @@
         <div class="topbar-divider"></div>
 
         <!-- Novo Terminal (Ícone com Destaque Primário) -->
-        <button id="btn-new-terminal" class="btn-topbar-icon btn-topbar-primary" title="Novo Terminal (Alt + T ou ⌘ + T)" type="button">
+        <button id="btn-new-terminal" class="btn-topbar-icon btn-topbar-primary" data-i18n-title="btn_new_terminal_title" title="Novo Terminal (Alt + T ou ⌘ + T)" type="button">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
         </button>
 
+        <!-- Seletor de Idioma em Dropdown -->
+        <div class="language-dropdown-container" id="language-dropdown-container">
+          <button id="btn-language-dropdown" class="btn-topbar-icon btn-language-trigger" data-i18n-title="btn_language_title" title="Alterar Idioma / Change Language" type="button" aria-haspopup="true" aria-expanded="false">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="2" y1="12" x2="22" y2="12"></line>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            </svg>
+            <span id="active-language-label" class="active-language-label">🇧🇷 PT</span>
+            <svg class="dropdown-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+          <div id="language-dropdown-menu" class="language-dropdown-menu hidden">
+            <button class="language-dropdown-item active" data-lang="pt" type="button">
+              <span class="lang-flag">🇧🇷</span>
+              <span class="lang-name">Português (Brasil)</span>
+            </button>
+            <button class="language-dropdown-item" data-lang="en" type="button">
+              <span class="lang-flag">🇺🇸</span>
+              <span class="lang-name">English</span>
+            </button>
+            <button class="language-dropdown-item" data-lang="es" type="button">
+              <span class="lang-flag">🇪🇸</span>
+              <span class="lang-name">Español</span>
+            </button>
+          </div>
+        </div>
+
         <!-- Alternar Tema (Ícone) -->
-        <button id="btn-theme-toggle" class="btn-topbar-icon" title="Alternar Tema Claro / Escuro (Alt + J)" type="button">
+        <button id="btn-theme-toggle" class="btn-topbar-icon" data-i18n-title="btn_theme_toggle_title" title="Alternar Tema Claro / Escuro (Alt + J)" type="button">
           <svg id="icon-theme-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="5"></circle>
             <line x1="12" y1="1" x2="12" y2="3"></line>
@@ -171,7 +209,7 @@
         </button>
 
         <!-- Ajuda (Ícone) -->
-        <button id="btn-help" class="btn-topbar-icon" title="Atalhos de teclado e ajuda" type="button">
+        <button id="btn-help" class="btn-topbar-icon" data-i18n-title="btn_help_title" title="Atalhos de teclado e ajuda" type="button">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"></circle>
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
@@ -294,7 +332,7 @@
               <div class="about-title-block">
                 <div class="about-title-row">
                   <span class="about-app-name">Termix</span>
-                  <span class="about-version-badge">v1.5.0</span>
+                  <span class="about-version-badge">v1.6.0</span>
                 </div>
                 <p class="about-app-desc">Multi-Terminal Dashboard Desktop App (macOS, Windows & Linux)</p>
               </div>
@@ -407,16 +445,32 @@
               </div>
 
               <div class="toolbar-actions">
+                <select id="hosts-group-mode" class="select-filter" title="Modo de Visualização e Agrupamento">
+                  <option value="tag">🏷️ Agrupar por Tag</option>
+                  <option value="none">📋 Lista Plana</option>
+                  <option value="type">💻 Agrupar por Tipo</option>
+                </select>
                 <select id="hosts-filter-type" class="select-filter">
                   <option value="all">Todos os tipos</option>
                   <option value="ssh">Apenas SSH</option>
                   <option value="local">Apenas Local</option>
                 </select>
+                <button id="btn-hosts-backup" class="btn-action btn-secondary" title="Exportar e Importar Configurações e Credenciais">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  <span data-i18n="hosts_btn_backup">Backup</span>
+                </button>
                 <button id="btn-add-host" class="btn-action btn-primary">
-                  <span>+</span> Novo Host
+                  <span>+</span> <span data-i18n="hosts_btn_new_host">Novo Host</span>
                 </button>
               </div>
             </div>
+
+            <!-- Barra de Filtros Rápidos por Tag (Chips) -->
+            <div id="hosts-tag-chips-bar" class="hosts-tag-chips-bar"></div>
 
             <!-- Lista de Hosts -->
             <div id="hosts-list" class="hosts-cards-grid">
@@ -435,9 +489,19 @@
                 <span class="lock-icon">🔒</span>
                 <span>Credenciais criptografadas com <strong>AES-256-GCM</strong> em SQLite local</span>
               </div>
-              <button id="btn-add-identity" class="btn-action btn-primary">
-                <span>+</span> Nova Identidade
-              </button>
+              <div class="toolbar-actions" style="display: flex; gap: 8px;">
+                <button id="btn-identities-backup" class="btn-action btn-secondary" title="Exportar e Importar Configurações e Credenciais">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  <span data-i18n="hosts_btn_backup">Backup</span>
+                </button>
+                <button id="btn-add-identity" class="btn-action btn-primary">
+                  <span>+</span> <span data-i18n="hosts_btn_new_identity">Nova Identidade</span>
+                </button>
+              </div>
             </div>
 
             <!-- Lista de Identidades -->
@@ -1007,9 +1071,18 @@
         </div>
 
         <form id="form-ai-settings" class="modal-body form-body">
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label for="settings-select-language" data-i18n="ai_label_language">Idioma da Interface (Language)</label>
+            <select id="settings-select-language">
+              <option value="pt">🇧🇷 Português (Brasil)</option>
+              <option value="en">🇺🇸 English</option>
+              <option value="es">🇪🇸 Español</option>
+            </select>
+          </div>
+
           <div class="form-row">
             <div class="form-group flex-1">
-              <label for="ai-select-provider">Provedor de IA *</label>
+              <label for="ai-select-provider" data-i18n="ai_label_provider">Provedor de IA *</label>
               <select id="ai-select-provider">
                 <option value="gemini" selected>Google Gemini (Recomendado - Ultra Rápido)</option>
                 <option value="openai">OpenAI (GPT-4o, GPT-4o-mini, o3-mini)</option>
@@ -1024,8 +1097,8 @@
 
             <div class="form-group flex-1">
               <label for="ai-input-model">
-                <span>Modelo *</span>
-                <span class="label-help">Digite qualquer modelo ou clique em uma sugestão</span>
+                <span data-i18n="ai_label_model">Modelo *</span>
+                <span class="label-help" data-i18n="ai_model_help">Digite qualquer modelo ou clique em uma sugestão</span>
               </label>
               <input type="text" id="ai-input-model" list="ai-model-datalist" placeholder="Ex: gemini-2.5-flash, gpt-4o, claude-3-5-sonnet..." autocomplete="off">
               <datalist id="ai-model-datalist"></datalist>
@@ -1034,7 +1107,7 @@
           </div>
 
           <div class="form-group hidden" id="ai-region-group">
-            <label for="ai-select-region">Região AWS Bedrock (Region) *</label>
+            <label for="ai-select-region" data-i18n="ai_label_region">Região AWS Bedrock (Region) *</label>
             <select id="ai-select-region">
               <option value="us-east-1" selected>us-east-1 (EUA - N. Virginia)</option>
               <option value="us-west-2">us-west-2 (EUA - Oregon)</option>
@@ -1044,50 +1117,323 @@
               <option value="ap-northeast-1">ap-northeast-1 (Ásia - Tóquio)</option>
               <option value="sa-east-1">sa-east-1 (América do Sul - São Paulo)</option>
             </select>
-            <span class="input-hint">Região onde os modelos do Amazon Bedrock estão habilitados na sua conta AWS.</span>
+            <span class="input-hint" data-i18n="ai_region_hint">Região onde os modelos do Amazon Bedrock estão habilitados na sua conta AWS.</span>
           </div>
 
           <div class="form-group" id="ai-apikey-group">
             <label for="ai-input-apikey">
-              <span id="ai-key-label">Chave de API (API Key)</span>
-              <span class="label-help" id="ai-key-help">Obtenha gratuitamente no Google AI Studio (aistudio.google.com)</span>
+              <span id="ai-key-label" data-i18n="ai_label_apikey">Chave de API (API Key)</span>
+              <span class="label-help" id="ai-key-help" data-i18n="ai_key_help">Armazenada localmente com criptografia AES-256-GCM</span>
             </label>
             <div class="password-input-wrap">
-              <input type="password" id="ai-input-apikey" placeholder="Cole sua chave aqui (salva com criptografia AES-256-GCM)..." autocomplete="off">
+              <input type="password" id="ai-input-apikey" data-i18n-placeholder="ai_key_placeholder" placeholder="Cole sua chave aqui (salva com criptografia AES-256-GCM)..." autocomplete="off">
               <button type="button" class="btn-toggle-password" id="btn-toggle-ai-key" title="Ver / Ocultar">👁</button>
             </div>
             <div class="key-status-row" style="display: flex; align-items: center; justify-content: space-between; margin-top: 4px;">
-              <span class="input-hint" id="ai-key-preview-text">Nenhuma chave configurada.</span>
-              <button type="button" class="btn-text-danger hidden" id="btn-clear-ai-key" style="background: none; border: none; color: #ef4444; font-size: 0.76rem; cursor: pointer; text-decoration: underline;">Remover Chave</button>
+              <span class="input-hint" id="ai-key-preview-text" data-i18n="ai_key_none">Nenhuma chave configurada.</span>
+              <button type="button" class="btn-text-danger hidden" id="btn-clear-ai-key" data-i18n="ai_btn_clear_key" style="background: none; border: none; color: #ef4444; font-size: 0.76rem; cursor: pointer; text-decoration: underline;">Remover Chave</button>
             </div>
           </div>
 
           <div class="form-group hidden" id="ai-baseurl-group">
-            <label for="ai-input-baseurl">Endpoint / URL Base (Opcional ou Local)</label>
+            <label for="ai-input-baseurl" data-i18n="ai_label_baseurl">Endpoint / URL Base (Opcional ou Local)</label>
             <input type="text" id="ai-input-baseurl" placeholder="http://localhost:11434/v1">
-            <span class="input-hint" id="ai-baseurl-hint">Padrão para Ollama local: http://localhost:11434/v1</span>
+            <span class="input-hint" id="ai-baseurl-hint" data-i18n="ai_baseurl_hint">Padrão para Ollama local: http://localhost:11434/v1</span>
           </div>
 
           <div class="form-group">
             <label class="checkbox-label">
               <input type="checkbox" id="ai-check-redact" checked>
-              <span>Mascara senhas, tokens Bearer e chaves privadas SSH antes do envio (Redaction)</span>
+              <span data-i18n="ai_label_redact">Mascara senhas, tokens Bearer e chaves privadas SSH antes do envio (Redaction)</span>
             </label>
+          </div>
+
+          <div class="settings-backup-section">
+            <div class="settings-backup-info">
+              <h4 data-i18n="backup_modal_title">Exportar e Importar Configurações</h4>
+              <p class="input-hint" data-i18n="backup_modal_subtitle">Backup completo ou migração de hosts, credenciais e workspaces</p>
+            </div>
+            <button type="button" class="btn-action btn-secondary" id="btn-settings-open-backup">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span data-i18n="hosts_btn_backup">Gerenciar Backup</span>
+            </button>
           </div>
 
           <div id="ai-test-status" class="ai-test-status hidden"></div>
 
-          <div class="form-actions">
+          <div class="form-actions" style="margin-top: 16px;">
             <button type="button" class="btn-action btn-secondary" id="btn-test-ai-connection">
               <span class="test-spinner hidden"></span>
-              <span>Testar Conexão</span>
+              <span data-i18n="ai_btn_test">Testar Conexão</span>
             </button>
-            <button type="submit" class="btn-action btn-primary" id="btn-save-ai-settings">Salvar Configurações</button>
+            <button type="submit" class="btn-action btn-primary" id="btn-save-ai-settings" data-i18n="ai_btn_save">Salvar Configurações</button>
           </div>
         </form>
       </div>
     </div>
-  </div>
+
+    <!-- Modal: Exportar e Importar Configurações e Credenciais (Backup) -->
+    <div id="backup-modal" class="modal-backdrop hidden">
+      <div class="modal-card modal-card-large">
+        <div class="modal-header">
+          <div class="modal-title-with-badge">
+            <div class="header-icon-wrap" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+            </div>
+            <div>
+              <h3 data-i18n="backup_modal_title">Exportar e Importar Configurações</h3>
+              <p class="modal-subtitle" data-i18n="backup_modal_subtitle">Backup completo e migração segura de hosts, identidades, credenciais e workspaces</p>
+            </div>
+          </div>
+          <button class="btn-modal-close" id="btn-close-backup-modal">✕</button>
+        </div>
+
+        <div class="hosts-modal-tabs backup-modal-tabs">
+          <button type="button" class="hosts-tab-btn active" id="tab-btn-export" data-backup-tab="export">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span data-i18n="backup_tab_export">Exportar Dados (Backup)</span>
+          </button>
+          <button type="button" class="hosts-tab-btn" id="tab-btn-import" data-backup-tab="import">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span data-i18n="backup_tab_import">Importar Dados (Restaurar)</span>
+          </button>
+        </div>
+
+        <div class="modal-body backup-modal-body">
+          <!-- ABA 1: EXPORTAR -->
+          <div id="backup-view-export" class="backup-tab-view">
+            <form id="form-backup-export">
+              <div class="backup-form-step">
+                <h4 class="backup-step-title" data-i18n="export_section_items">1. Selecione os itens para incluir no backup:</h4>
+                <div class="backup-checkbox-grid">
+                  <label class="backup-checkbox-card">
+                    <input type="checkbox" id="export-check-hosts" checked>
+                    <div class="checkbox-card-content">
+                      <span class="checkbox-card-title">🖥️ Hosts & Conexões SSH</span>
+                      <span class="checkbox-card-desc" id="export-desc-hosts">Hosts configurados, portas, diretórios e tags</span>
+                    </div>
+                  </label>
+
+                  <label class="backup-checkbox-card">
+                    <input type="checkbox" id="export-check-identities" checked>
+                    <div class="checkbox-card-content">
+                      <span class="checkbox-card-title">🔑 Identidades & Credenciais</span>
+                      <span class="checkbox-card-desc" id="export-desc-identities">Usuários, senhas criptografadas, chaves SSH e certificados</span>
+                    </div>
+                  </label>
+
+                  <label class="backup-checkbox-card">
+                    <input type="checkbox" id="export-check-workspaces" checked>
+                    <div class="checkbox-card-content">
+                      <span class="checkbox-card-title">🗂️ Workspaces Salvos</span>
+                      <span class="checkbox-card-desc" id="export-desc-workspaces">Conjuntos de terminais pré-configurados e layouts</span>
+                    </div>
+                  </label>
+
+                  <label class="backup-checkbox-card">
+                    <input type="checkbox" id="export-check-settings" checked>
+                    <div class="checkbox-card-content">
+                      <span class="checkbox-card-title">⚙️ Configurações & IA</span>
+                      <span class="checkbox-card-desc" id="export-desc-settings">Provedores de IA, chaves de API, idioma da interface e tema</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div class="backup-form-step" style="margin-top: 18px;">
+                <h4 class="backup-step-title" data-i18n="export_section_security">2. Proteção e Segurança do Arquivo:</h4>
+                <div class="backup-security-options">
+                  <label class="security-option-card active" id="label-security-encrypted">
+                    <input type="radio" name="export-security-type" value="encrypted" checked id="radio-export-encrypted">
+                    <div class="security-card-content">
+                      <div class="security-card-header">
+                        <strong data-i18n="export_mode_encrypted">🔒 Proteger com Senha (Criptografia AES-256-GCM)</strong>
+                        <span class="badge-recommended">Recomendado</span>
+                      </div>
+                      <p class="input-hint" data-i18n="export_mode_encrypted_desc">
+                        O arquivo será criptografado com chave de 256 bits derivada da sua senha via PBKDF2 (100.000 iterações). Seguro para armazenar ou transportar.
+                      </p>
+                    </div>
+                  </label>
+
+                  <div id="export-password-fields" class="export-password-box">
+                    <div class="form-row">
+                      <div class="form-group flex-1">
+                        <label for="export-input-password" data-i18n="export_label_password">Senha de Proteção *</label>
+                        <div class="password-input-wrap">
+                          <input type="password" id="export-input-password" data-i18n-placeholder="export_placeholder_password" placeholder="Crie uma senha forte..." autocomplete="new-password">
+                          <button type="button" class="btn-toggle-password" id="btn-toggle-export-pass" title="Ver / Ocultar">👁</button>
+                        </div>
+                      </div>
+                      <div class="form-group flex-1">
+                        <label for="export-input-password-confirm" data-i18n="export_label_password_confirm">Confirmar Senha *</label>
+                        <div class="password-input-wrap">
+                          <input type="password" id="export-input-password-confirm" data-i18n-placeholder="export_placeholder_password_confirm" placeholder="Digite a mesma senha..." autocomplete="new-password">
+                          <button type="button" class="btn-toggle-password" id="btn-toggle-export-pass-confirm" title="Ver / Ocultar">👁</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <label class="security-option-card" id="label-security-plain" style="margin-top: 6px;">
+                    <input type="radio" name="export-security-type" value="plain" id="radio-export-plain">
+                    <div class="security-card-content">
+                      <div class="security-card-header">
+                        <strong data-i18n="export_mode_plain">📄 Exportar sem Senha (Arquivo Aberto / JSON)</strong>
+                      </div>
+                      <p class="input-hint" data-i18n="export_mode_plain_no_creds">
+                        Gera um arquivo JSON padrão. Recomendado apenas para exportar hosts e layouts sem senhas sensíveis.
+                      </p>
+                    </div>
+                  </label>
+
+                  <div id="export-plain-options" class="export-plain-box hidden">
+                    <label class="checkbox-label" style="color: #f59e0b;">
+                      <input type="checkbox" id="export-check-plain-creds">
+                      <span data-i18n="export_mode_plain_with_creds">Incluir senhas e chaves descriptografadas (Aviso: conterá segredos em texto puro)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div id="export-status-box" class="backup-status-box hidden"></div>
+
+              <div class="form-actions" style="margin-top: 20px;">
+                <button type="button" class="btn-action btn-secondary" id="btn-cancel-backup-export" data-i18n="btn_cancel">Cancelar</button>
+                <button type="submit" class="btn-action btn-primary" id="btn-do-export">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  <span id="btn-export-text" data-i18n="export_btn_action">Baixar Arquivo de Backup (.termix)</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- ABA 2: IMPORTAR -->
+          <div id="backup-view-import" class="backup-tab-view hidden">
+            <form id="form-backup-import">
+              <div class="backup-form-step">
+                <h4 class="backup-step-title" data-i18n="import_section_file">1. Selecione o arquivo de backup (.termix ou .json):</h4>
+                
+                <!-- Área Drag & Drop -->
+                <div id="import-dropzone" class="backup-dropzone">
+                  <input type="file" id="import-file-input" accept=".termix,.json" class="hidden">
+                  <div class="dropzone-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="17 8 12 3 7 8"></polyline>
+                      <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                  </div>
+                  <div class="dropzone-text">
+                    <p class="dropzone-title" data-i18n="import_dropzone_title">Arraste e solte o arquivo aqui ou clique para selecionar</p>
+                    <p class="dropzone-subtitle" data-i18n="import_dropzone_hint">Suporta arquivos criptografados .termix ou exportações .json</p>
+                  </div>
+                  <button type="button" class="btn-action btn-secondary btn-sm" id="btn-browse-file">Selecionar Arquivo...</button>
+                </div>
+
+                <!-- Card de Arquivo Selecionado & Status -->
+                <div id="import-file-card" class="import-file-card hidden">
+                  <div class="file-card-info">
+                    <span class="file-card-icon">📦</span>
+                    <div>
+                      <strong id="import-file-name">backup.termix</strong>
+                      <span class="file-card-meta" id="import-file-meta">Carregado com sucesso</span>
+                    </div>
+                  </div>
+                  <button type="button" class="btn-remove-file" id="btn-remove-import-file" title="Remover arquivo">✕</button>
+                </div>
+
+                <div id="import-encrypted-prompt" class="import-encrypted-prompt hidden" style="margin-top: 12px;">
+                  <div class="encrypted-notice-badge">
+                    <span data-i18n="import_encrypted_notice">🔒 Este arquivo de backup está protegido com criptografia AES-256-GCM.</span>
+                  </div>
+                  <div class="form-group" style="margin-top: 10px;">
+                    <label for="import-input-password" data-i18n="import_label_password">Senha de Descriptografia do Arquivo *</label>
+                    <div class="password-input-wrap">
+                      <input type="password" id="import-input-password" data-i18n-placeholder="import_placeholder_password" placeholder="Digite a senha deste backup..." autocomplete="current-password">
+                      <button type="button" class="btn-toggle-password" id="btn-toggle-import-pass" title="Ver / Ocultar">👁</button>
+                      <button type="button" class="btn-action btn-secondary btn-sm" id="btn-unlock-preview" style="margin-left: 8px;">Desbloquear</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Preview de Conteúdo do Arquivo -->
+                <div id="import-preview-box" class="import-preview-box hidden" style="margin-top: 12px;">
+                  <div class="preview-header">
+                    <strong>Resumo do Conteúdo Encontrado:</strong>
+                    <span class="preview-date" id="import-preview-date"></span>
+                  </div>
+                  <div class="preview-pills" id="import-preview-pills"></div>
+                </div>
+              </div>
+
+              <div class="backup-form-step" style="margin-top: 18px;">
+                <h4 class="backup-step-title" data-i18n="import_section_options">2. Opções de Restauração e Resolução de Conflitos:</h4>
+                <div class="import-mode-select">
+                  <label class="radio-label">
+                    <input type="radio" name="import-conflict-mode" value="merge" checked>
+                    <div>
+                      <strong data-i18n="import_mode_merge">Mesclar e Atualizar (Recomendado)</strong>
+                      <p class="input-hint">Atualiza registros existentes que possuam mesmo identificador e insere todos os novos.</p>
+                    </div>
+                  </label>
+
+                  <label class="radio-label">
+                    <input type="radio" name="import-conflict-mode" value="add_new">
+                    <div>
+                      <strong data-i18n="import_mode_add_new">Adicionar como Novos</strong>
+                      <p class="input-hint">Gera novos identificadores únicos para todos os itens, sem alterar nada do que você já tem.</p>
+                    </div>
+                  </label>
+
+                  <label class="radio-label" style="color: #ef4444;">
+                    <input type="radio" name="import-conflict-mode" value="replace">
+                    <div>
+                      <strong data-i18n="import_mode_replace">Substituir Tudo (Restauração Completa)</strong>
+                      <p class="input-hint">Apaga hosts, identidades e workspaces atuais e restaura exatamente o conteúdo deste backup.</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div id="import-status-box" class="backup-status-box hidden"></div>
+
+              <div class="form-actions" style="margin-top: 20px;">
+                <button type="button" class="btn-action btn-secondary" id="btn-cancel-backup-import" data-i18n="btn_cancel">Cancelar</button>
+                <button type="submit" class="btn-action btn-primary" id="btn-do-import" disabled>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                  <span id="btn-import-text" data-i18n="import_btn_action">Importar e Restaurar Dados</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
 
   <!-- Scripts xterm.js (Local, 100% offline com caminhos relativos) -->
   <script src="vendor/xterm.js"></script>
@@ -1103,6 +1449,9 @@
       document.write('<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"><\/script>');
     }
   </script>
+
+  <!-- Internacionalização (i18n) -->
+  <script src="i18n.js"></script>
 
   <!-- Lógica Principal da Aplicação SPA -->
   <script src="app.js"></script>

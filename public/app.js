@@ -72,6 +72,12 @@ class TermixDashboard {
     this.broadcastCountEl = document.getElementById('broadcast-count');
     this.helpModalEl = document.getElementById('help-modal');
 
+    // Modais e Estado de Backup & Idioma
+    this.backupModalEl = document.getElementById('backup-modal');
+    this.languageDropdownMenuEl = document.getElementById('language-dropdown-menu');
+    this.languageDropdownBtnEl = document.getElementById('btn-language-dropdown');
+    this.currentImportFile = null;
+
     // Modais e Estado de Hosts & Identidades (Estilo Termius)
     this.hostsModalEl = document.getElementById('hosts-modal');
     this.hostFormModalEl = document.getElementById('host-form-modal');
@@ -80,6 +86,9 @@ class TermixDashboard {
     this.savedIdentities = [];
     this.hostsFilterType = 'all';
     this.hostsSearchQuery = '';
+    this.hostsSelectedTag = 'all';
+    this.hostsGroupMode = 'tag';
+    this.collapsedTagGroups = new Set();
     this.activeHostsTab = 'hosts';
 
     // Modais e Estado de Workspaces (Conjuntos de Terminais Salvos)
@@ -100,10 +109,12 @@ class TermixDashboard {
       this.initWebSocket();
     }
 
+    this.initI18n();
     this.initGlobalEvents();
     this.initHostsManager();
     this.initWorkspacesManager();
     this.initAIManager();
+    this.initBackupManager();
   }
 
   /**
@@ -193,6 +204,18 @@ class TermixDashboard {
     if (window.termix.onOpenAICopilot) {
       window.termix.onOpenAICopilot(() => {
         this.openAICopilot();
+      });
+    }
+
+    if (window.termix.onOpenBackup) {
+      window.termix.onOpenBackup((initialTab) => {
+        this.openBackupModal(initialTab || 'export');
+      });
+    }
+
+    if (window.termix.onSetLanguage) {
+      window.termix.onSetLanguage((lang) => {
+        this.changeLanguage(lang);
       });
     }
 
@@ -431,10 +454,10 @@ class TermixDashboard {
     const dropdownBtn = document.getElementById('btn-layout-dropdown');
 
     const layoutLabels = {
-      'auto': 'Auto',
-      '1col': '1 Col',
-      '2col': '2 Col',
-      '3col': '3 Col'
+      'auto': window.t ? window.t('layout_auto') : 'Auto',
+      '1col': window.t ? window.t('layout_1col') : '1 Col',
+      '2col': window.t ? window.t('layout_2col') : '2 Col',
+      '3col': window.t ? window.t('layout_3col') : '3 Col'
     };
 
     const layoutIcons = {
@@ -623,6 +646,30 @@ class TermixDashboard {
       }
     });
 
+    // Dropdown de Idiomas (Pt, En, Es)
+    this.languageDropdownBtnEl?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isHidden = this.languageDropdownMenuEl?.classList.toggle('hidden');
+      this.languageDropdownBtnEl.setAttribute('aria-expanded', !isHidden ? 'true' : 'false');
+    });
+
+    document.querySelectorAll('.language-dropdown-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const lang = item.getAttribute('data-lang');
+        if (lang) {
+          this.changeLanguage(lang);
+        }
+      });
+    });
+
+    window.addEventListener('click', (e) => {
+      if (this.languageDropdownMenuEl && !this.languageDropdownMenuEl.contains(e.target) && e.target !== this.languageDropdownBtnEl && !this.languageDropdownBtnEl?.contains(e.target)) {
+        this.languageDropdownMenuEl.classList.add('hidden');
+        this.languageDropdownBtnEl?.setAttribute('aria-expanded', 'false');
+      }
+    });
+
     // Atalhos Globais de Teclado
     window.addEventListener('keydown', (e) => {
       if ((e.altKey && e.code === 'KeyT') || (e.metaKey && e.shiftKey && e.code === 'KeyT') || (e.ctrlKey && e.shiftKey && e.code === 'KeyT')) {
@@ -664,6 +711,18 @@ class TermixDashboard {
         this.openWorkspacesModal();
       }
 
+      // Alt + E ou Cmd + Shift + E: Exportar e Importar Configurações (Backup)
+      if ((e.altKey && e.code === 'KeyE') || (e.metaKey && e.shiftKey && e.code === 'KeyE') || (e.ctrlKey && e.shiftKey && e.code === 'KeyE')) {
+        e.preventDefault();
+        this.openBackupModal('export');
+      }
+
+      // Cmd + Shift + I ou Ctrl + Shift + I: Importar Configurações (Restauração)
+      if (((e.metaKey && e.shiftKey && e.code === 'KeyI') || (e.ctrlKey && e.shiftKey && e.code === 'KeyI')) && !e.altKey) {
+        e.preventDefault();
+        this.openBackupModal('import');
+      }
+
       // Cmd + I ou Alt + I: Termix Copilot (Assistente de IA)
       if ((e.altKey && e.code === 'KeyI') || (e.metaKey && !e.shiftKey && e.code === 'KeyI') || (e.ctrlKey && !e.shiftKey && e.code === 'KeyI')) {
         e.preventDefault();
@@ -673,6 +732,8 @@ class TermixDashboard {
       if (e.key === 'Escape') {
         layoutDropdownMenu?.classList.add('hidden');
         btnLayoutDropdown?.setAttribute('aria-expanded', 'false');
+        this.languageDropdownMenuEl?.classList.add('hidden');
+        this.languageDropdownBtnEl?.setAttribute('aria-expanded', 'false');
         this.helpModalEl?.classList.add('hidden');
         this.broadcastBarEl?.classList.add('hidden');
         this.hostFormModalEl?.classList.add('hidden');
@@ -680,6 +741,7 @@ class TermixDashboard {
         this.hostsModalEl?.classList.add('hidden');
         this.workspaceFormModalEl?.classList.add('hidden');
         this.workspacesModalEl?.classList.add('hidden');
+        this.backupModalEl?.classList.add('hidden');
         this.aiCopilotModalEl?.classList.add('hidden');
         this.aiDiagnosisModalEl?.classList.add('hidden');
         this.aiBroadcastModalEl?.classList.add('hidden');
@@ -725,6 +787,11 @@ class TermixDashboard {
 
     document.getElementById('hosts-filter-type')?.addEventListener('change', (e) => {
       this.hostsFilterType = e.target.value;
+      this.renderHostsList();
+    });
+
+    document.getElementById('hosts-group-mode')?.addEventListener('change', (e) => {
+      this.hostsGroupMode = e.target.value;
       this.renderHostsList();
     });
 
@@ -989,7 +1056,237 @@ class TermixDashboard {
     this.renderIdentitiesList();
   }
 
+  renderTagChipsBar() {
+    const chipsBar = document.getElementById('hosts-tag-chips-bar');
+    if (!chipsBar) return;
+    chipsBar.innerHTML = '';
+
+    const hosts = this.savedHosts || [];
+    if (hosts.length === 0) {
+      chipsBar.style.display = 'none';
+      return;
+    }
+    chipsBar.style.display = 'flex';
+
+    // Calcula contagem de cada tag
+    const tagCounts = new Map();
+    let untaggedCount = 0;
+
+    hosts.forEach(h => {
+      const tags = Array.isArray(h.tags) ? h.tags.filter(Boolean) : [];
+      if (tags.length === 0) {
+        untaggedCount++;
+      } else {
+        tags.forEach(t => {
+          const norm = String(t).trim();
+          if (norm) {
+            tagCounts.set(norm, (tagCounts.get(norm) || 0) + 1);
+          }
+        });
+      }
+    });
+
+    // Chip "Todas"
+    const allChip = document.createElement('button');
+    allChip.type = 'button';
+    allChip.className = `tag-chip-btn ${this.hostsSelectedTag === 'all' ? 'active' : ''}`;
+    allChip.innerHTML = `<span>🏷️ Todas</span><span class="tag-chip-count">${hosts.length}</span>`;
+    allChip.addEventListener('click', () => {
+      this.hostsSelectedTag = 'all';
+      this.renderHostsList();
+    });
+    chipsBar.appendChild(allChip);
+
+    // Tags ordenadas alfabeticamente
+    const sortedTags = Array.from(tagCounts.keys()).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+    sortedTags.forEach(tag => {
+      const count = tagCounts.get(tag);
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = `tag-chip-btn ${this.hostsSelectedTag === tag ? 'active' : ''}`;
+      chip.innerHTML = `<span>#${this.escapeHtml(tag)}</span><span class="tag-chip-count">${count}</span>`;
+      chip.addEventListener('click', () => {
+        this.hostsSelectedTag = this.hostsSelectedTag === tag ? 'all' : tag;
+        this.renderHostsList();
+      });
+      chipsBar.appendChild(chip);
+    });
+
+    // Chip "Sem Tag" (se houver algum)
+    if (untaggedCount > 0) {
+      const untaggedChip = document.createElement('button');
+      untaggedChip.type = 'button';
+      untaggedChip.className = `tag-chip-btn ${this.hostsSelectedTag === '__untagged__' ? 'active' : ''}`;
+      untaggedChip.innerHTML = `<span>📁 Sem Tag</span><span class="tag-chip-count">${untaggedCount}</span>`;
+      untaggedChip.addEventListener('click', () => {
+        this.hostsSelectedTag = this.hostsSelectedTag === '__untagged__' ? 'all' : '__untagged__';
+        this.renderHostsList();
+      });
+      chipsBar.appendChild(untaggedChip);
+    }
+  }
+
+  createHostCard(host) {
+    const card = document.createElement('div');
+    card.className = 'host-card';
+
+    const colorStripe = document.createElement('div');
+    colorStripe.className = 'host-card-color-stripe';
+    colorStripe.style.backgroundColor = host.color || '#38bdf8';
+    card.appendChild(colorStripe);
+
+    const header = document.createElement('div');
+    header.className = 'host-card-header';
+
+    const titleGroup = document.createElement('div');
+    titleGroup.className = 'host-card-title-group';
+
+    const titleRow = document.createElement('div');
+    titleRow.style.display = 'flex';
+    titleRow.style.alignItems = 'center';
+    titleRow.style.gap = '8px';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'host-name';
+    nameEl.textContent = host.name;
+    titleRow.appendChild(nameEl);
+
+    const badges = document.createElement('div');
+    badges.className = 'host-badges';
+
+    const typeBadge = document.createElement('span');
+    typeBadge.className = `badge-pill ${host.host_type === 'ssh' ? 'badge-ssh' : 'badge-local'}`;
+    typeBadge.textContent = host.host_type === 'ssh' ? 'SSH' : 'LOCAL';
+    badges.appendChild(typeBadge);
+    titleRow.appendChild(badges);
+
+    titleGroup.appendChild(titleRow);
+
+    const targetInfo = document.createElement('span');
+    targetInfo.className = 'host-target-info';
+    if (host.host_type === 'ssh') {
+      const username = host.username || (host.identity && host.identity.username);
+      const userPrefix = username ? `${username}@` : '';
+      targetInfo.textContent = `${userPrefix}${host.hostname || 'localhost'}:${host.port || 22}`;
+    } else {
+      targetInfo.textContent = 'Terminal Local (PTY)';
+    }
+    titleGroup.appendChild(targetInfo);
+
+    header.appendChild(titleGroup);
+    card.appendChild(header);
+
+    // Meta: Default Path e Startup Command
+    if (host.default_path || host.startup_command) {
+      const metaBox = document.createElement('div');
+      metaBox.className = 'host-config-meta';
+
+      if (host.default_path) {
+        const pathLine = document.createElement('div');
+        pathLine.className = 'meta-line';
+        pathLine.title = `Diretório Padrão: ${host.default_path}`;
+        pathLine.innerHTML = `
+          <svg class="meta-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span>${this.escapeHtml(host.default_path)}</span>
+        `;
+        metaBox.appendChild(pathLine);
+      }
+
+      if (host.startup_command) {
+        const cmdLine = document.createElement('div');
+        cmdLine.className = 'meta-line';
+        cmdLine.title = `Comando Inicial: ${host.startup_command}`;
+        cmdLine.innerHTML = `
+          <svg class="meta-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          <span><code>${this.escapeHtml(host.startup_command)}</code></span>
+        `;
+        metaBox.appendChild(cmdLine);
+      }
+
+      card.appendChild(metaBox);
+    }
+
+    // Tags
+    if (Array.isArray(host.tags) && host.tags.length > 0) {
+      const tagsRow = document.createElement('div');
+      tagsRow.className = 'host-tags-row';
+      host.tags.forEach(tag => {
+        const tagPill = document.createElement('span');
+        tagPill.className = 'host-tag';
+        tagPill.textContent = `#${tag}`;
+        tagPill.title = `Filtrar por #${tag}`;
+        tagPill.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.hostsSelectedTag = this.hostsSelectedTag === tag ? 'all' : tag;
+          this.renderHostsList();
+        });
+        tagsRow.appendChild(tagPill);
+      });
+      card.appendChild(tagsRow);
+    }
+
+    // Rodapé do card: Ações
+    const actions = document.createElement('div');
+    actions.className = 'host-card-actions';
+
+    const btnConnect = document.createElement('button');
+    btnConnect.className = 'btn-connect-host';
+    btnConnect.innerHTML = `
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="4 17 10 11 4 5"></polyline>
+        <line x1="12" y1="19" x2="20" y2="19"></line>
+      </svg>
+      <span>Conectar</span>
+    `;
+    btnConnect.addEventListener('click', () => this.connectToHost(host));
+    actions.appendChild(btnConnect);
+
+    const iconActions = document.createElement('div');
+    iconActions.className = 'card-action-icons';
+
+    const btnEdit = document.createElement('button');
+    btnEdit.className = 'btn-icon-action';
+    btnEdit.title = 'Editar Host';
+    btnEdit.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+      </svg>
+    `;
+    btnEdit.addEventListener('click', () => this.openHostForm(host));
+    iconActions.appendChild(btnEdit);
+
+    const btnDelete = document.createElement('button');
+    btnDelete.className = 'btn-icon-action btn-icon-delete';
+    btnDelete.title = 'Excluir Host';
+    btnDelete.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+      </svg>
+    `;
+    btnDelete.addEventListener('click', async () => {
+      if (confirm(`Deseja realmente remover o host "${host.name}"?`)) {
+        await this.apiDeleteHost(host.id);
+        await this.refreshHostsAndIdentities();
+      }
+    });
+    iconActions.appendChild(btnDelete);
+
+    actions.appendChild(iconActions);
+    card.appendChild(actions);
+
+    return card;
+  }
+
   renderHostsList() {
+    this.renderTagChipsBar();
+
     const container = document.getElementById('hosts-list');
     const emptyEl = document.getElementById('hosts-empty');
     if (!container) return;
@@ -998,9 +1295,22 @@ class TermixDashboard {
 
     const query = (this.hostsSearchQuery || '').toLowerCase().trim();
     const typeFilter = this.hostsFilterType || 'all';
+    const tagFilter = this.hostsSelectedTag || 'all';
+    const groupMode = this.hostsGroupMode || 'tag';
 
-    const filtered = this.savedHosts.filter(h => {
+    const filtered = (this.savedHosts || []).filter(h => {
       if (typeFilter !== 'all' && h.host_type !== typeFilter) return false;
+
+      // Filtro por Tag do Chip selecionado
+      if (tagFilter !== 'all') {
+        const hTags = Array.isArray(h.tags) ? h.tags : [];
+        if (tagFilter === '__untagged__') {
+          if (hTags.length > 0) return false;
+        } else {
+          if (!hTags.includes(tagFilter)) return false;
+        }
+      }
+
       if (!query) return true;
 
       const nameMatch = (h.name || '').toLowerCase().includes(query);
@@ -1012,161 +1322,99 @@ class TermixDashboard {
     });
 
     if (filtered.length === 0) {
+      container.classList.remove('is-grouped');
       if (emptyEl) emptyEl.classList.remove('hidden');
       return;
     } else {
       if (emptyEl) emptyEl.classList.add('hidden');
     }
 
-    filtered.forEach(host => {
-      const card = document.createElement('div');
-      card.className = 'host-card';
+    if (groupMode === 'none') {
+      // Lista Plana
+      container.classList.remove('is-grouped');
+      filtered.forEach(host => {
+        container.appendChild(this.createHostCard(host));
+      });
+      return;
+    }
 
-      const colorStripe = document.createElement('div');
-      colorStripe.className = 'host-card-color-stripe';
-      colorStripe.style.backgroundColor = host.color || '#38bdf8';
-      card.appendChild(colorStripe);
+    // Modo Agrupado (por Tag ou por Tipo)
+    container.classList.add('is-grouped');
 
-      const header = document.createElement('div');
-      header.className = 'host-card-header';
+    const groupsMap = new Map();
 
-      const titleGroup = document.createElement('div');
-      titleGroup.className = 'host-card-title-group';
-
-      const titleRow = document.createElement('div');
-      titleRow.style.display = 'flex';
-      titleRow.style.alignItems = 'center';
-      titleRow.style.gap = '8px';
-
-      const nameEl = document.createElement('span');
-      nameEl.className = 'host-name';
-      nameEl.textContent = host.name;
-      titleRow.appendChild(nameEl);
-
-      const badges = document.createElement('div');
-      badges.className = 'host-badges';
-
-      const typeBadge = document.createElement('span');
-      typeBadge.className = `badge-pill ${host.host_type === 'ssh' ? 'badge-ssh' : 'badge-local'}`;
-      typeBadge.textContent = host.host_type === 'ssh' ? 'SSH' : 'LOCAL';
-      badges.appendChild(typeBadge);
-      titleRow.appendChild(badges);
-
-      titleGroup.appendChild(titleRow);
-
-      const targetInfo = document.createElement('span');
-      targetInfo.className = 'host-target-info';
-      if (host.host_type === 'ssh') {
-        const username = host.username || (host.identity && host.identity.username);
-        const userPrefix = username ? `${username}@` : '';
-        targetInfo.textContent = `${userPrefix}${host.hostname || 'localhost'}:${host.port || 22}`;
-      } else {
-        targetInfo.textContent = 'Terminal Local (PTY)';
-      }
-      titleGroup.appendChild(targetInfo);
-
-      header.appendChild(titleGroup);
-      card.appendChild(header);
-
-      // Meta: Default Path e Startup Command
-      if (host.default_path || host.startup_command) {
-        const metaBox = document.createElement('div');
-        metaBox.className = 'host-config-meta';
-
-        if (host.default_path) {
-          const pathLine = document.createElement('div');
-          pathLine.className = 'meta-line';
-          pathLine.title = `Diretório Padrão: ${host.default_path}`;
-          pathLine.innerHTML = `
-            <svg class="meta-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-            </svg>
-            <span>${this.escapeHtml(host.default_path)}</span>
-          `;
-          metaBox.appendChild(pathLine);
-        }
-
-        if (host.startup_command) {
-          const cmdLine = document.createElement('div');
-          cmdLine.className = 'meta-line';
-          cmdLine.title = `Comando Inicial: ${host.startup_command}`;
-          cmdLine.innerHTML = `
-            <svg class="meta-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-            </svg>
-            <span><code>${this.escapeHtml(host.startup_command)}</code></span>
-          `;
-          metaBox.appendChild(cmdLine);
-        }
-
-        card.appendChild(metaBox);
-      }
-
-      // Tags
-      if (Array.isArray(host.tags) && host.tags.length > 0) {
-        const tagsRow = document.createElement('div');
-        tagsRow.className = 'host-tags-row';
-        host.tags.forEach(tag => {
-          const tagPill = document.createElement('span');
-          tagPill.className = 'host-tag';
-          tagPill.textContent = tag;
-          tagsRow.appendChild(tagPill);
+    if (groupMode === 'type') {
+      filtered.forEach(host => {
+        const key = host.host_type === 'ssh' ? 'Servidores SSH' : 'Terminais Locais (PTY)';
+        if (!groupsMap.has(key)) groupsMap.set(key, []);
+        groupsMap.get(key).push(host);
+      });
+    } else {
+      // groupMode === 'tag'
+      filtered.forEach(host => {
+        const tags = Array.isArray(host.tags) && host.tags.length > 0 ? host.tags : ['__untagged__'];
+        tags.forEach(tag => {
+          if (!groupsMap.has(tag)) groupsMap.set(tag, []);
+          groupsMap.get(tag).push(host);
         });
-        card.appendChild(tagsRow);
-      }
+      });
+    }
 
-      // Rodapé do card: Ações
-      const actions = document.createElement('div');
-      actions.className = 'host-card-actions';
+    // Ordena as chaves dos grupos
+    const sortedGroupKeys = Array.from(groupsMap.keys()).sort((a, b) => {
+      if (a === '__untagged__') return 1;
+      if (b === '__untagged__') return -1;
+      return a.localeCompare(b, undefined, { sensitivity: 'base' });
+    });
 
-      const btnConnect = document.createElement('button');
-      btnConnect.className = 'btn-connect-host';
-      btnConnect.innerHTML = `
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <polyline points="4 17 10 11 4 5"></polyline>
-          <line x1="12" y1="19" x2="20" y2="19"></line>
-        </svg>
-        <span>Conectar</span>
+    sortedGroupKeys.forEach(groupKey => {
+      const groupHosts = groupsMap.get(groupKey);
+      if (!groupHosts || groupHosts.length === 0) return;
+
+      const isUntagged = groupKey === '__untagged__';
+      const groupName = isUntagged ? 'Sem Tag / Geral' : (groupMode === 'tag' ? `#${groupKey}` : groupKey);
+      const groupIcon = isUntagged ? '📁' : (groupMode === 'tag' ? '🏷️' : (groupKey.includes('SSH') ? '🌐' : '💻'));
+      const isCollapsed = this.collapsedTagGroups.has(groupKey);
+
+      const sectionEl = document.createElement('div');
+      sectionEl.className = `host-group-section ${isCollapsed ? 'collapsed' : ''}`;
+      sectionEl.setAttribute('data-group-key', groupKey);
+
+      const headerEl = document.createElement('div');
+      headerEl.className = 'host-group-header';
+      headerEl.innerHTML = `
+        <div class="host-group-title">
+          <span class="host-group-badge-icon">${groupIcon}</span>
+          <span class="host-group-name">${this.escapeHtml(groupName)}</span>
+          <span class="host-group-count-pill">${groupHosts.length} ${groupHosts.length === 1 ? 'host' : 'hosts'}</span>
+        </div>
+        <div class="host-group-toggle-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
       `;
-      btnConnect.addEventListener('click', () => this.connectToHost(host));
-      actions.appendChild(btnConnect);
 
-      const iconActions = document.createElement('div');
-      iconActions.className = 'card-action-icons';
-
-      const btnEdit = document.createElement('button');
-      btnEdit.className = 'btn-icon-action';
-      btnEdit.title = 'Editar Host';
-      btnEdit.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-        </svg>
-      `;
-      btnEdit.addEventListener('click', () => this.openHostForm(host));
-      iconActions.appendChild(btnEdit);
-
-      const btnDelete = document.createElement('button');
-      btnDelete.className = 'btn-icon-action btn-icon-delete';
-      btnDelete.title = 'Excluir Host';
-      btnDelete.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="3 6 5 6 21 6"></polyline>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-        </svg>
-      `;
-      btnDelete.addEventListener('click', async () => {
-        if (confirm(`Deseja realmente remover o host "${host.name}"?`)) {
-          await this.apiDeleteHost(host.id);
-          await this.refreshHostsAndIdentities();
+      headerEl.addEventListener('click', () => {
+        if (this.collapsedTagGroups.has(groupKey)) {
+          this.collapsedTagGroups.delete(groupKey);
+          sectionEl.classList.remove('collapsed');
+        } else {
+          this.collapsedTagGroups.add(groupKey);
+          sectionEl.classList.add('collapsed');
         }
       });
-      iconActions.appendChild(btnDelete);
 
-      actions.appendChild(iconActions);
-      card.appendChild(actions);
+      sectionEl.appendChild(headerEl);
 
-      container.appendChild(card);
+      const gridEl = document.createElement('div');
+      gridEl.className = 'host-group-cards-grid';
+      groupHosts.forEach(host => {
+        gridEl.appendChild(this.createHostCard(host));
+      });
+      sectionEl.appendChild(gridEl);
+
+      container.appendChild(sectionEl);
     });
   }
 
@@ -2766,6 +3014,12 @@ class TermixDashboard {
       const testStatus = document.getElementById('ai-test-status');
       testStatus?.classList.add('hidden');
 
+      // Sincroniza seletor de idioma
+      const selectLang = document.getElementById('settings-select-language');
+      if (selectLang && window.i18n) {
+        selectLang.value = window.i18n.getLanguage();
+      }
+
       this.aiSettingsModalEl?.classList.remove('hidden');
     } catch (err) {
       console.error('[Termix AI] Erro ao carregar configurações:', err);
@@ -2791,6 +3045,12 @@ class TermixDashboard {
         clearKey,
         redactSecrets
       });
+
+      // Salva idioma se alterado
+      const selectLang = document.getElementById('settings-select-language');
+      if (selectLang && selectLang.value) {
+        await this.changeLanguage(selectLang.value);
+      }
 
       this.aiConfigCache = savedConfig;
       this.clearKeyForProvider = {};
@@ -2857,6 +3117,705 @@ class TermixDashboard {
       }
     }
   }
+
+  /* ==========================================================================
+     SISTEMA DE INTERNACIONALIZAÇÃO (i18n) & PREFERÊNCIAS
+     ========================================================================== */
+
+  /**
+   * Inicializa o suporte a múltiplos idiomas (pt, en, es) e sincroniza com o banco
+   */
+  async initI18n() {
+    if (!window.i18n) return;
+
+    // Carrega preferência de idioma persistida no backend
+    try {
+      const savedLang = await this.getAppSetting('app_language');
+      if (savedLang && ['pt', 'en', 'es'].includes(savedLang)) {
+        window.i18n.setLanguage(savedLang);
+      }
+    } catch (e) {
+      console.warn('[Termix] Falha ao carregar idioma do banco:', e.message);
+    }
+
+    // Reage a alterações de idioma
+    window.i18n.onLanguageChange(() => {
+      this.setLayout(this.currentLayout);
+      this.updateGridState();
+      this.updateExportCountsPreview();
+    });
+
+    // Seletor de idioma na modal de configurações
+    const langSelect = document.getElementById('settings-select-language');
+    langSelect?.addEventListener('change', (e) => {
+      this.changeLanguage(e.target.value);
+    });
+  }
+
+  /**
+   * Altera o idioma ativo do Termix em tempo real e sincroniza com o armazenamento
+   */
+  async changeLanguage(lang, persistBackend = true) {
+    if (!window.i18n || !lang) return;
+    window.i18n.setLanguage(lang);
+
+    this.languageDropdownMenuEl?.classList.add('hidden');
+    this.languageDropdownBtnEl?.setAttribute('aria-expanded', 'false');
+
+    if (persistBackend) {
+      try {
+        await this.saveAppSetting('app_language', lang);
+      } catch (err) {
+        console.warn('[Termix] Falha ao persistir idioma no backend:', err.message);
+      }
+    }
+  }
+
+  /**
+   * Lê uma configuração geral do Termix
+   */
+  async getAppSetting(key) {
+    try {
+      if (this.isElectron && window.termix?.settings) {
+        return await window.termix.settings.get(key);
+      }
+      const res = await fetch(`/api/settings/${encodeURIComponent(key)}`);
+      const data = await res.json();
+      return data?.value;
+    } catch (err) {
+      console.error(`[Termix] Falha ao obter setting [${key}]:`, err);
+      return null;
+    }
+  }
+
+  /**
+   * Salva uma configuração geral do Termix
+   */
+  async saveAppSetting(key, value) {
+    try {
+      if (this.isElectron && window.termix?.settings) {
+        return await window.termix.settings.save(key, value);
+      }
+      const res = await fetch(`/api/settings/${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value })
+      });
+      return await res.json();
+    } catch (err) {
+      console.error(`[Termix] Falha ao salvar setting [${key}]:`, err);
+      return null;
+    }
+  }
+
+  /* ==========================================================================
+     GERENCIADOR DE BACKUP (EXPORTAÇÃO & IMPORTAÇÃO DE CONFIGS E CREDENCIAIS)
+     ========================================================================== */
+
+  /**
+   * Inicializa formulários, eventos de drag-and-drop e controles da modal de Backup
+   */
+  initBackupManager() {
+    // Botões que abrem o gerenciador de backup
+    document.getElementById('btn-open-backup')?.addEventListener('click', () => this.openBackupModal('export'));
+    document.getElementById('btn-hosts-backup')?.addEventListener('click', () => this.openBackupModal('export'));
+    document.getElementById('btn-identities-backup')?.addEventListener('click', () => this.openBackupModal('export'));
+    document.getElementById('btn-settings-open-backup')?.addEventListener('click', () => this.openBackupModal('export'));
+
+    // Botões de fechar e cancelar
+    document.getElementById('btn-close-backup-modal')?.addEventListener('click', () => this.closeBackupModal());
+    document.getElementById('btn-cancel-backup-export')?.addEventListener('click', () => this.closeBackupModal());
+    document.getElementById('btn-cancel-backup-import')?.addEventListener('click', () => this.closeBackupModal());
+
+    this.backupModalEl?.addEventListener('click', (e) => {
+      if (e.target === this.backupModalEl) {
+        this.closeBackupModal();
+      }
+    });
+
+    // Alternar abas (Exportar / Importar)
+    document.getElementById('tab-btn-export')?.addEventListener('click', () => this.switchBackupTab('export'));
+    document.getElementById('tab-btn-import')?.addEventListener('click', () => this.switchBackupTab('import'));
+
+    // Alternar modo de segurança no Export (Criptografado vs Aberto)
+    const radioEncrypted = document.getElementById('radio-export-encrypted');
+    const radioPlain = document.getElementById('radio-export-plain');
+    const labelEncrypted = document.getElementById('label-security-encrypted');
+    const labelPlain = document.getElementById('label-security-plain');
+    const passFields = document.getElementById('export-password-fields');
+    const plainFields = document.getElementById('export-plain-options');
+    const btnExportText = document.getElementById('btn-export-text');
+
+    const updateSecurityUI = () => {
+      const isEnc = radioEncrypted ? radioEncrypted.checked : true;
+      labelEncrypted?.classList.toggle('active', isEnc);
+      labelPlain?.classList.toggle('active', !isEnc);
+      passFields?.classList.toggle('hidden', !isEnc);
+      plainFields?.classList.toggle('hidden', isEnc);
+      if (btnExportText) {
+        btnExportText.textContent = isEnc
+          ? (window.t ? window.t('export_btn_action') : 'Baixar Arquivo de Backup (.termix)')
+          : (window.t ? window.t('export_btn_action_json') : 'Baixar Arquivo JSON (.json)');
+      }
+    };
+
+    radioEncrypted?.addEventListener('change', updateSecurityUI);
+    radioPlain?.addEventListener('change', updateSecurityUI);
+
+    // Botões de visualizar/ocultar senha no Export
+    const togglePass = (inputEl, btnEl) => {
+      if (!inputEl) return;
+      const isPass = inputEl.type === 'password';
+      inputEl.type = isPass ? 'text' : 'password';
+      if (btnEl) btnEl.textContent = isPass ? '🙈' : '👁';
+    };
+
+    document.getElementById('btn-toggle-export-pass')?.addEventListener('click', (e) => {
+      togglePass(document.getElementById('export-input-password'), e.currentTarget);
+    });
+
+    document.getElementById('btn-toggle-export-pass-confirm')?.addEventListener('click', (e) => {
+      togglePass(document.getElementById('export-input-password-confirm'), e.currentTarget);
+    });
+
+    // Submissão do formulário de Exportar
+    document.getElementById('form-backup-export')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.handleExecuteExport();
+    });
+
+    // Área de Upload e Drag-and-Drop do Import
+    const dropzone = document.getElementById('import-dropzone');
+    const fileInput = document.getElementById('import-file-input');
+    const btnBrowse = document.getElementById('btn-browse-file');
+
+    btnBrowse?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (this.isElectron && window.termix?.config?.openImportFile) {
+        const res = await window.termix.config.openImportFile();
+        if (res && res.success && res.content) {
+          this.handleFileLoaded(res.content, res.fileName, res.sizeBytes);
+          return;
+        }
+      }
+      fileInput?.click();
+    });
+
+    dropzone?.addEventListener('click', (e) => {
+      if (e.target !== btnBrowse) {
+        btnBrowse?.click();
+      }
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropzone?.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropzone?.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.remove('dragover');
+      });
+    });
+
+    dropzone?.addEventListener('drop', (e) => {
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        const file = files[0];
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          this.handleFileLoaded(event.target.result, file.name, file.size);
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    fileInput?.addEventListener('change', (e) => {
+      const files = e.target.files;
+      if (files && files.length > 0) {
+        const file = files[0];
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          this.handleFileLoaded(event.target.result, file.name, file.size);
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    // Remover arquivo selecionado no Import
+    document.getElementById('btn-remove-import-file')?.addEventListener('click', () => {
+      this.resetImportState();
+    });
+
+    // Botão de revelar senha no Import
+    document.getElementById('btn-toggle-import-pass')?.addEventListener('click', (e) => {
+      togglePass(document.getElementById('import-input-password'), e.currentTarget);
+    });
+
+    // Desbloquear preview com senha
+    const btnUnlock = document.getElementById('btn-unlock-preview');
+    const inputImportPass = document.getElementById('import-input-password');
+
+    btnUnlock?.addEventListener('click', () => this.testImportDecryption());
+    inputImportPass?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.testImportDecryption();
+      }
+    });
+
+    // Submissão do formulário de Importar
+    document.getElementById('form-backup-import')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.handleExecuteImport();
+    });
+  }
+
+  /**
+   * Abre a modal de backup na aba desejada
+   */
+  openBackupModal(initialTab = 'export') {
+    this.backupModalEl?.classList.remove('hidden');
+    this.switchBackupTab(initialTab);
+    this.updateExportCountsPreview();
+    this.hideBackupStatus(document.getElementById('export-status-box'));
+    this.hideBackupStatus(document.getElementById('import-status-box'));
+  }
+
+  /**
+   * Fecha a modal de backup
+   */
+  closeBackupModal() {
+    this.backupModalEl?.classList.add('hidden');
+  }
+
+  /**
+   * Alterna entre as abas Exportar e Importar
+   */
+  switchBackupTab(tab) {
+    const isExport = tab === 'export';
+    const tabBtnExport = document.getElementById('tab-btn-export');
+    const tabBtnImport = document.getElementById('tab-btn-import');
+    const viewExport = document.getElementById('backup-view-export');
+    const viewImport = document.getElementById('backup-view-import');
+
+    tabBtnExport?.classList.toggle('active', isExport);
+    tabBtnImport?.classList.toggle('active', !isExport);
+    viewExport?.classList.toggle('hidden', !isExport);
+    viewImport?.classList.toggle('hidden', isExport);
+  }
+
+  /**
+   * Atualiza a descrição de quantidades nos cards da aba de Exportação
+   */
+  updateExportCountsPreview() {
+    const hostsDesc = document.getElementById('export-desc-hosts');
+    const idDesc = document.getElementById('export-desc-identities');
+    const wsDesc = document.getElementById('export-desc-workspaces');
+
+    const hCount = (this.savedHosts && this.savedHosts.length) || 0;
+    const iCount = (this.savedIdentities && this.savedIdentities.length) || 0;
+    const wCount = (this.savedWorkspaces && this.savedWorkspaces.length) || 0;
+
+    if (hostsDesc) {
+      hostsDesc.textContent = `${hCount} hosts configurados, portas, diretórios e tags`;
+    }
+    if (idDesc) {
+      idDesc.textContent = `${iCount} identidades salvas (senhas e chaves criptografadas)`;
+    }
+    if (wsDesc) {
+      wsDesc.textContent = `${wCount} workspaces salvos e configurações de layout`;
+    }
+  }
+
+  /**
+   * Executa a exportação e download/salvamento do arquivo de backup
+   */
+  async handleExecuteExport() {
+    const checkHosts = document.getElementById('export-check-hosts')?.checked;
+    const checkIdentities = document.getElementById('export-check-identities')?.checked;
+    const checkWorkspaces = document.getElementById('export-check-workspaces')?.checked;
+    const checkSettings = document.getElementById('export-check-settings')?.checked;
+    const isEncrypted = document.getElementById('radio-export-encrypted')?.checked;
+    const statusBox = document.getElementById('export-status-box');
+    const btnExport = document.getElementById('btn-do-export');
+    const btnText = document.getElementById('btn-export-text');
+
+    if (!checkHosts && !checkIdentities && !checkWorkspaces && !checkSettings) {
+      this.showBackupStatus(statusBox, 'error', window.t ? window.t('export_error_no_selection') : 'Selecione ao menos um item para exportar.');
+      return;
+    }
+
+    let password = '';
+    if (isEncrypted) {
+      const p1 = document.getElementById('export-input-password')?.value || '';
+      const p2 = document.getElementById('export-input-password-confirm')?.value || '';
+      if (!p1) {
+        this.showBackupStatus(statusBox, 'error', window.t ? window.t('export_error_pass_required') : 'Informe uma senha para proteger o backup.');
+        document.getElementById('export-input-password')?.focus();
+        return;
+      }
+      if (p1.length < 4) {
+        this.showBackupStatus(statusBox, 'error', window.t ? window.t('export_error_pass_short') : 'A senha deve ter pelo menos 4 caracteres.');
+        document.getElementById('export-input-password')?.focus();
+        return;
+      }
+      if (p1 !== p2) {
+        this.showBackupStatus(statusBox, 'error', window.t ? window.t('export_error_pass_mismatch') : 'As senhas digitadas não coincidem.');
+        document.getElementById('export-input-password-confirm')?.focus();
+        return;
+      }
+      password = p1;
+    }
+
+    const includeCredentialsPlain = document.getElementById('export-check-plain-creds')?.checked;
+
+    try {
+      if (btnExport) btnExport.disabled = true;
+      if (btnText) btnText.textContent = window.t ? window.t('export_generating') : 'Gerando arquivo de backup...';
+      this.hideBackupStatus(statusBox);
+
+      const options = {
+        includeHosts: checkHosts,
+        includeIdentities: checkIdentities,
+        includeWorkspaces: checkWorkspaces,
+        includeSettings: checkSettings,
+        securityType: isEncrypted ? 'encrypted' : 'plain',
+        password: isEncrypted ? password : '',
+        includeCredentialsPlain: !isEncrypted && includeCredentialsPlain
+      };
+
+      const bundle = await this.exportConfig(options);
+      if (!bundle || bundle.error) {
+        throw new Error(bundle?.error || 'Falha ao gerar pacote de exportação.');
+      }
+
+      const ext = isEncrypted ? 'termix' : 'json';
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const defaultFilename = `termix-backup-${timestamp}.${ext}`;
+      const fileContent = typeof bundle === 'string' ? bundle : JSON.stringify(bundle, null, 2);
+
+      if (this.isElectron && window.termix?.config?.saveExportFile) {
+        const saveRes = await window.termix.config.saveExportFile(fileContent, defaultFilename);
+        if (saveRes.canceled) {
+          if (btnExport) btnExport.disabled = false;
+          if (btnText) {
+            btnText.textContent = isEncrypted
+              ? (window.t ? window.t('export_btn_action') : 'Baixar Arquivo de Backup (.termix)')
+              : (window.t ? window.t('export_btn_action_json') : 'Baixar Arquivo JSON (.json)');
+          }
+          return;
+        }
+        if (!saveRes.success) {
+          throw new Error(saveRes.error || 'Falha ao salvar arquivo no disco.');
+        }
+        this.showBackupStatus(statusBox, 'success', `✓ Backup salvo com sucesso em: ${saveRes.filePath}`);
+      } else {
+        const blob = new Blob([fileContent], { type: isEncrypted ? 'application/octet-stream' : 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = defaultFilename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 500);
+        this.showBackupStatus(statusBox, 'success', `✓ Arquivo [${defaultFilename}] baixado com sucesso!`);
+      }
+
+      // Limpa os campos de senha
+      const p1El = document.getElementById('export-input-password');
+      const p2El = document.getElementById('export-input-password-confirm');
+      if (p1El) p1El.value = '';
+      if (p2El) p2El.value = '';
+
+      setTimeout(() => {
+        if (btnExport) btnExport.disabled = false;
+        if (btnText) {
+          btnText.textContent = isEncrypted
+            ? (window.t ? window.t('export_btn_action') : 'Baixar Arquivo de Backup (.termix)')
+            : (window.t ? window.t('export_btn_action_json') : 'Baixar Arquivo JSON (.json)');
+        }
+      }, 1500);
+    } catch (err) {
+      console.error('[Termix Backup] Erro na exportação:', err);
+      this.showBackupStatus(statusBox, 'error', `Erro ao exportar: ${err.message}`);
+      if (btnExport) btnExport.disabled = false;
+      if (btnText) {
+        btnText.textContent = isEncrypted
+          ? (window.t ? window.t('export_btn_action') : 'Baixar Arquivo de Backup (.termix)')
+          : (window.t ? window.t('export_btn_action_json') : 'Baixar Arquivo JSON (.json)');
+      }
+    }
+  }
+
+  /**
+   * Processa o arquivo carregado no Import
+   */
+  async handleFileLoaded(content, fileName, sizeBytes) {
+    this.currentImportFile = { content, fileName, sizeBytes };
+    const dropzone = document.getElementById('import-dropzone');
+    const fileCard = document.getElementById('import-file-card');
+    const nameEl = document.getElementById('import-file-name');
+    const metaEl = document.getElementById('import-file-meta');
+    const encPrompt = document.getElementById('import-encrypted-prompt');
+    const previewBox = document.getElementById('import-preview-box');
+    const statusBox = document.getElementById('import-status-box');
+    const btnImport = document.getElementById('btn-do-import');
+
+    this.hideBackupStatus(statusBox);
+    dropzone?.classList.add('hidden');
+    fileCard?.classList.remove('hidden');
+
+    if (nameEl) nameEl.textContent = fileName || 'backup.termix';
+    const sizeKb = ((sizeBytes || content.length) / 1024).toFixed(1);
+    if (metaEl) metaEl.textContent = `${sizeKb} KB • Carregado`;
+
+    try {
+      const preview = await this.previewImportConfig(content, '');
+      if (!preview.valid) {
+        this.showBackupStatus(statusBox, 'error', `Arquivo inválido ou corrompido: ${preview.error || 'Estrutura não reconhecida'}`);
+        if (btnImport) btnImport.disabled = true;
+        encPrompt?.classList.add('hidden');
+        previewBox?.classList.add('hidden');
+        return;
+      }
+
+      if (preview.encrypted) {
+        encPrompt?.classList.remove('hidden');
+        previewBox?.classList.add('hidden');
+        if (btnImport) btnImport.disabled = true;
+        const passInput = document.getElementById('import-input-password');
+        if (passInput) {
+          passInput.value = '';
+          passInput.focus();
+        }
+      } else {
+        encPrompt?.classList.add('hidden');
+        this.renderImportPreview(preview);
+        if (btnImport) btnImport.disabled = false;
+      }
+    } catch (err) {
+      this.showBackupStatus(statusBox, 'error', `Falha ao inspecionar arquivo: ${err.message}`);
+      if (btnImport) btnImport.disabled = true;
+    }
+  }
+
+  /**
+   * Testa a descriptografia do arquivo com a senha digitada
+   */
+  async testImportDecryption(password) {
+    if (!this.currentImportFile) return;
+    const pass = password !== undefined ? password : (document.getElementById('import-input-password')?.value || '');
+    const statusBox = document.getElementById('import-status-box');
+    const encPrompt = document.getElementById('import-encrypted-prompt');
+    const previewBox = document.getElementById('import-preview-box');
+    const btnImport = document.getElementById('btn-do-import');
+    const btnUnlock = document.getElementById('btn-unlock-preview');
+
+    if (!pass) {
+      this.showBackupStatus(statusBox, 'error', window.t ? window.t('import_error_pass_required') : 'Por favor, digite a senha do backup.');
+      document.getElementById('import-input-password')?.focus();
+      return;
+    }
+
+    try {
+      if (btnUnlock) btnUnlock.disabled = true;
+      const preview = await this.previewImportConfig(this.currentImportFile.content, pass);
+      if (btnUnlock) btnUnlock.disabled = false;
+
+      if (preview && preview.passwordValid) {
+        this.hideBackupStatus(statusBox);
+        encPrompt?.classList.add('hidden');
+        this.renderImportPreview(preview);
+        if (btnImport) btnImport.disabled = false;
+      } else {
+        this.showBackupStatus(statusBox, 'error', preview?.error || (window.t ? window.t('import_error_pass_invalid') : 'Senha incorreta para este backup.'));
+        if (btnImport) btnImport.disabled = true;
+        previewBox?.classList.add('hidden');
+        document.getElementById('import-input-password')?.select();
+      }
+    } catch (err) {
+      if (btnUnlock) btnUnlock.disabled = false;
+      this.showBackupStatus(statusBox, 'error', `Erro ao verificar senha: ${err.message}`);
+    }
+  }
+
+  /**
+   * Renderiza os pills de contagem do conteúdo do arquivo de backup
+   */
+  renderImportPreview(preview) {
+    const previewBox = document.getElementById('import-preview-box');
+    const dateEl = document.getElementById('import-preview-date');
+    const pillsEl = document.getElementById('import-preview-pills');
+    if (!previewBox || !pillsEl) return;
+
+    const counts = preview.counts || {};
+    if (dateEl && preview.timestamp) {
+      try {
+        dateEl.textContent = new Date(preview.timestamp).toLocaleString();
+      } catch {
+        dateEl.textContent = preview.timestamp;
+      }
+    }
+
+    pillsEl.innerHTML = `
+      <span class="preview-pill">🖥️ ${counts.hosts || 0} ${window.t ? window.t('backup_item_hosts') : 'Hosts'}</span>
+      <span class="preview-pill">🔑 ${counts.identities || 0} ${window.t ? window.t('backup_item_identities') : 'Credenciais'}</span>
+      <span class="preview-pill">🗂️ ${counts.workspaces || 0} ${window.t ? window.t('backup_item_workspaces') : 'Workspaces'}</span>
+      <span class="preview-pill">${counts.settings ? '✓ ' + (window.t ? window.t('backup_item_settings') : 'Configurações de IA & Preferências') : '✕ Sem Configurações'}</span>
+    `;
+
+    previewBox.classList.remove('hidden');
+  }
+
+  /**
+   * Reseta o estado do importador para permitir nova seleção de arquivo
+   */
+  resetImportState() {
+    this.currentImportFile = null;
+    const dropzone = document.getElementById('import-dropzone');
+    const fileCard = document.getElementById('import-file-card');
+    const encPrompt = document.getElementById('import-encrypted-prompt');
+    const previewBox = document.getElementById('import-preview-box');
+    const statusBox = document.getElementById('import-status-box');
+    const btnImport = document.getElementById('btn-do-import');
+    const fileInput = document.getElementById('import-file-input');
+    const passInput = document.getElementById('import-input-password');
+
+    if (fileInput) fileInput.value = '';
+    if (passInput) passInput.value = '';
+    dropzone?.classList.remove('hidden');
+    fileCard?.classList.add('hidden');
+    encPrompt?.classList.add('hidden');
+    previewBox?.classList.add('hidden');
+    this.hideBackupStatus(statusBox);
+    if (btnImport) btnImport.disabled = true;
+  }
+
+  /**
+   * Executa a importação dos dados selecionados
+   */
+  async handleExecuteImport() {
+    if (!this.currentImportFile) return;
+    const statusBox = document.getElementById('import-status-box');
+    const btnImport = document.getElementById('btn-do-import');
+    const btnText = document.getElementById('btn-import-text');
+    const conflictRadio = document.querySelector('input[name="import-conflict-mode"]:checked');
+    const conflictMode = conflictRadio?.value || 'merge';
+    const password = document.getElementById('import-input-password')?.value || '';
+
+    if (conflictMode === 'replace') {
+      const confirmMsg = window.t ? window.t('import_confirm_replace') : 'Atenção: A opção "Substituir Tudo" apagará hosts, identidades e workspaces existentes no seu Termix antes de restaurar este backup. Deseja realmente prosseguir?';
+      if (!window.confirm(confirmMsg)) {
+        return;
+      }
+    }
+
+    try {
+      if (btnImport) btnImport.disabled = true;
+      if (btnText) btnText.textContent = window.t ? window.t('import_progress') : 'Restaurando dados...';
+      this.hideBackupStatus(statusBox);
+
+      const options = {
+        password,
+        conflictMode
+      };
+
+      const res = await this.importConfig(this.currentImportFile.content, options);
+      if (!res || !res.success) {
+        throw new Error(res?.error || 'Falha ao importar dados.');
+      }
+
+      const imp = res.imported || {};
+      const successMsg = `✓ Restauração concluída com sucesso! (${imp.hosts || 0} hosts, ${imp.identities || 0} credenciais, ${imp.workspaces || 0} workspaces).`;
+      this.showBackupStatus(statusBox, 'success', successMsg);
+
+      // Atualiza listas e dados no dashboard
+      await this.refreshHostsAndIdentities();
+      await this.refreshWorkspaces();
+
+      // Sincroniza idioma caso tenha sido importado
+      try {
+        const importedLang = await this.getAppSetting('app_language');
+        if (importedLang && importedLang !== (window.i18n ? window.i18n.getLanguage() : 'pt')) {
+          this.changeLanguage(importedLang, false);
+        }
+      } catch {}
+
+      setTimeout(() => {
+        this.closeBackupModal();
+        this.resetImportState();
+        if (btnImport) btnImport.disabled = false;
+        if (btnText) btnText.textContent = window.t ? window.t('import_btn_action') : 'Importar e Restaurar Dados';
+      }, 1800);
+    } catch (err) {
+      console.error('[Termix Backup] Erro na importação:', err);
+      this.showBackupStatus(statusBox, 'error', `Falha na restauração: ${err.message}`);
+      if (btnImport) btnImport.disabled = false;
+      if (btnText) btnText.textContent = window.t ? window.t('import_btn_action') : 'Importar e Restaurar Dados';
+    }
+  }
+
+  /**
+   * Chamadas de API para Backup (compatíveis com Electron e Web)
+   */
+  async exportConfig(options) {
+    if (this.isElectron && window.termix?.config?.export) {
+      return await window.termix.config.export(options);
+    }
+    const res = await fetch('/api/config/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options)
+    });
+    return await res.json();
+  }
+
+  async previewImportConfig(payload, password = '') {
+    if (this.isElectron && window.termix?.config?.preview) {
+      return await window.termix.config.preview(payload, password);
+    }
+    const res = await fetch('/api/config/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payload, password })
+    });
+    return await res.json();
+  }
+
+  async importConfig(payload, options) {
+    if (this.isElectron && window.termix?.config?.import) {
+      return await window.termix.config.import(payload, options);
+    }
+    const res = await fetch('/api/config/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payload, options })
+    });
+    return await res.json();
+  }
+
+  showBackupStatus(el, type, message) {
+    if (!el) return;
+    el.className = `backup-status-box ${type}`;
+    el.textContent = message;
+    el.classList.remove('hidden');
+  }
+
+  hideBackupStatus(el) {
+    if (!el) return;
+    el.className = 'backup-status-box hidden';
+    el.textContent = '';
+  }
 }
 
 /**
@@ -2887,28 +3846,28 @@ class TerminalInstance {
     this.cardEl.innerHTML = `
       <div class="terminal-card-header">
         <div class="mac-traffic-lights">
-          <span class="traffic-dot dot-close" title="Fechar Terminal"></span>
-          <span class="traffic-dot dot-clear" title="Limpar Tela"></span>
-          <span class="traffic-dot dot-max" title="Maximizar / Restaurar"></span>
+          <span class="traffic-dot dot-close" data-i18n-title="term_close_title" title="${window.t ? window.t('term_close_title') : 'Fechar Terminal'}"></span>
+          <span class="traffic-dot dot-clear" data-i18n-title="term_clear_title" title="${window.t ? window.t('term_clear_title') : 'Limpar Tela'}"></span>
+          <span class="traffic-dot dot-max" data-i18n-title="term_maximize_title" title="${window.t ? window.t('term_maximize_title') : 'Maximizar / Restaurar'}"></span>
         </div>
 
-        <div class="terminal-card-title" title="Dê duplo-clique para renomear">
+        <div class="terminal-card-title" data-i18n-title="term_rename_title" title="${window.t ? window.t('term_rename_title') : 'Dê duplo-clique para renomear'}">
           <span class="title-text">${this.title}</span>
         </div>
 
         <div class="terminal-card-tools">
           <span class="term-badge pid-badge">PID: ...</span>
-          <button class="btn-card-tool btn-ai-tool" title="Assistente de IA / Copilot (⌘+I)">
+          <button class="btn-card-tool btn-ai-tool" data-i18n-title="btn_ai_title" title="${window.t ? window.t('btn_ai_title') : 'Assistente de IA / Copilot (⌘+I)'}">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"></path>
             </svg>
           </button>
-          <button class="btn-card-tool btn-max-tool" title="Maximizar / Restaurar">
+          <button class="btn-card-tool btn-max-tool" data-i18n-title="term_maximize_title" title="${window.t ? window.t('term_maximize_title') : 'Maximizar / Restaurar'}">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
             </svg>
           </button>
-          <button class="btn-card-tool btn-close-tool" title="Fechar">
+          <button class="btn-card-tool btn-close-tool" data-i18n-title="term_close_title" title="${window.t ? window.t('term_close_title') : 'Fechar'}">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>

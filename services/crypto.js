@@ -100,6 +100,67 @@ class CryptoManager {
       return '';
     }
   }
+
+  /**
+   * Criptografa dados com chave derivada de senha do usuário (PBKDF2 + AES-256-GCM)
+   * Usado para exportação segura e portável de credenciais e configurações
+   * @param {string} plainText
+   * @param {string} password
+   * @returns {{ salt: string, iv: string, tag: string, ciphertext: string }}
+   */
+  static encryptWithPassword(plainText, password) {
+    if (!plainText || typeof plainText !== 'string' || !password || typeof password !== 'string') {
+      throw new Error('Texto e senha são obrigatórios para criptografia com senha');
+    }
+
+    const salt = crypto.randomBytes(16);
+    const key = crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256');
+    const iv = crypto.randomBytes(IV_LENGTH);
+
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+    let ciphertext = cipher.update(plainText, 'utf8', 'hex');
+    ciphertext += cipher.final('hex');
+    const tag = cipher.getAuthTag();
+
+    return {
+      salt: salt.toString('hex'),
+      iv: iv.toString('hex'),
+      tag: tag.toString('hex'),
+      ciphertext
+    };
+  }
+
+  encryptWithPassword(plainText, password) {
+    return CryptoManager.encryptWithPassword(plainText, password);
+  }
+
+  /**
+   * Descriptografa dados com chave derivada de senha do usuário (PBKDF2 + AES-256-GCM)
+   * @param {{ salt: string, iv: string, tag: string, ciphertext: string }} bundle
+   * @param {string} password
+   * @returns {string} plainText
+   */
+  static decryptWithPassword(bundle, password) {
+    if (!bundle || !bundle.salt || !bundle.iv || !bundle.tag || !bundle.ciphertext || !password) {
+      throw new Error('Parâmetros de descriptografia incompletos');
+    }
+
+    const salt = Buffer.from(bundle.salt, 'hex');
+    const iv = Buffer.from(bundle.iv, 'hex');
+    const tag = Buffer.from(bundle.tag, 'hex');
+    const key = crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256');
+
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(tag);
+
+    let decrypted = decipher.update(bundle.ciphertext, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  }
+
+  decryptWithPassword(bundle, password) {
+    return CryptoManager.decryptWithPassword(bundle, password);
+  }
 }
 
 module.exports = CryptoManager;
