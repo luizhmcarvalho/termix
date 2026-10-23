@@ -630,7 +630,18 @@ ipcMain.on('terminal:create', (event, options) => {
 ipcMain.on('terminal:input', (event, { id, data }) => {
   const session = terminals.get(id);
   if (session && typeof data === 'string') {
-    session.ptyProcess.write(data);
+    try {
+      session.ptyProcess.write(data);
+    } catch (err) {
+      console.warn(`[Termix Electron] Erro ao escrever no terminal [${id}] (Broken pipe?):`, err.message);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('terminal:error', {
+          id,
+          code: 'EPIPE',
+          message: `Broken pipe: falha ao enviar dados para o terminal (${err.message})`
+        });
+      }
+    }
   }
 });
 

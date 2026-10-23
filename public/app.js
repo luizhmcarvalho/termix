@@ -150,18 +150,28 @@ class TermixDashboard {
     window.termix.onOutput((msg) => {
       const instance = this.terminals.get(msg.id);
       if (instance && msg.data) {
+        if (typeof msg.data === 'string' && (msg.data.includes('Broken pipe') || msg.data.includes('Connection reset') || msg.data.includes('packet_write_wait'))) {
+          instance.recentBrokenPipeDetected = true;
+        }
         instance.term.write(msg.data);
       }
     });
 
     window.termix.onExit((msg) => {
       const instance = this.terminals.get(msg.id);
-      if (instance) instance.handleExit(msg.exitCode);
+      if (instance) instance.handleExit(msg.exitCode, msg.signal);
     });
 
     window.termix.onError((msg) => {
       const instance = this.terminals.get(msg.id);
       if (instance) {
+        if (msg.code === 'EPIPE' || (msg.message && msg.message.toLowerCase().includes('broken pipe'))) {
+          instance.recentBrokenPipeDetected = true;
+          instance.isBrokenPipe = true;
+          if (instance.btnReconnectTool) {
+            instance.btnReconnectTool.classList.add('btn-reconnect-pulse');
+          }
+        }
         instance.term.writeln(`\r\n\x1b[31m[Erro]: ${msg.message}\x1b[0m\r\n`);
       }
     });
@@ -322,19 +332,31 @@ class TermixDashboard {
       case 'output':
         {
           const instance = this.terminals.get(id);
-          if (instance && msg.data) instance.term.write(msg.data);
+          if (instance && msg.data) {
+            if (typeof msg.data === 'string' && (msg.data.includes('Broken pipe') || msg.data.includes('Connection reset') || msg.data.includes('packet_write_wait'))) {
+              instance.recentBrokenPipeDetected = true;
+            }
+            instance.term.write(msg.data);
+          }
         }
         break;
       case 'exit':
         {
           const instance = this.terminals.get(id);
-          if (instance) instance.handleExit(msg.exitCode);
+          if (instance) instance.handleExit(msg.exitCode, msg.signal);
         }
         break;
       case 'error':
         {
           const instance = this.terminals.get(id);
           if (instance) {
+            if (msg.code === 'EPIPE' || (msg.message && msg.message.toLowerCase().includes('broken pipe'))) {
+              instance.recentBrokenPipeDetected = true;
+              instance.isBrokenPipe = true;
+              if (instance.btnReconnectTool) {
+                instance.btnReconnectTool.classList.add('btn-reconnect-pulse');
+              }
+            }
             instance.term.writeln(`\r\n\x1b[31m[Erro]: ${msg.message}\x1b[0m\r\n`);
           }
         }
@@ -428,7 +450,7 @@ class TermixDashboard {
       this.emptyStateEl.classList.add('hidden');
     }
 
-    this.fitAll();
+    this.updateGridLayout();
   }
 
   fitAll() {
@@ -437,6 +459,96 @@ class TermixDashboard {
         inst.fit();
       }
     });
+  }
+
+  /**
+   * Recalcula a grade de forma adaptativa e inteligente de acordo com o tamanho da janela
+   * (inclusive maximizada) com largura mínima (380px) e altura mínima (280px)
+   */
+  updateGridLayout() {
+    if (!this.gridEl) return;
+
+    const count = this.terminals.size;
+    if (count === 0) {
+      this.gridEl.style.removeProperty('--grid-cols');
+      this.gridEl.style.removeProperty('--grid-template-rows');
+      this.gridEl.style.removeProperty('--grid-auto-rows');
+      return;
+    }
+
+    const availableWidth = this.gridEl.clientWidth || window.innerWidth;
+    const availableHeight = this.gridEl.clientHeight || (window.innerHeight - 80);
+    const gap = 10;
+    const minWidth = 380;
+    const minHeight = 280;
+
+    // Colunas máximas que cabem com largura mínima respeitada para leitura ideal
+    const maxColsByWidth = Math.max(1, Math.floor((availableWidth - 20 + gap) / (minWidth + gap)));
+
+    let cols = 1;
+    const layout = this.currentLayout || 'auto';
+
+    if (layout === 'auto') {
+      if (count === 1) {
+        cols = 1;
+      } else if (count === 2) {
+        cols = Math.min(2, maxColsByWidth);
+      } else if (count === 3) {
+        cols = Math.min(3, maxColsByWidth);
+      } else if (count === 4) {
+        if (maxColsByWidth >= 4 && availableWidth >= 1700 && availableHeight < 680) {
+          cols = 4;
+        } else {
+          cols = Math.min(2, maxColsByWidth);
+        }
+      } else if (count === 5 || count === 6) {
+        if (maxColsByWidth >= 3) {
+          cols = 3;
+        } else if (maxColsByWidth >= 2) {
+          cols = 2;
+        } else {
+          cols = 1;
+        }
+      } else {
+        // Mais de 6 terminais
+        cols = Math.min(count, Math.max(1, maxColsByWidth));
+      }
+    } else if (layout === '1col') {
+      cols = 1;
+    } else if (layout === '2col') {
+      cols = Math.min(2, Math.max(1, maxColsByWidth));
+    } else if (layout === '3col') {
+      cols = Math.min(3, Math.max(1, maxColsByWidth));
+    } else if (layout === '4col') {
+      cols = Math.min(4, Math.max(1, maxColsByWidth));
+    }
+
+    cols = Math.max(1, cols);
+    const rows = Math.ceil(count / cols) || 1;
+
+    // Calcula altura disponível por linha
+    const paddingTotal = 20; // 10px top + 10px bottom
+    const totalGaps = (rows - 1) * gap;
+    const heightPerRow = (availableHeight - paddingTotal - totalGaps) / rows;
+
+    let templateRows = '';
+    let autoRows = '';
+
+    if (heightPerRow >= minHeight) {
+      // Todos os terminais cabem confortavelmente na janela sem estouro -> preenche 100% da altura da janela maximizada
+      templateRows = `repeat(${rows}, 1fr)`;
+      autoRows = '1fr';
+    } else {
+      // Altura insuficiente para manter altura mínima legível -> aplica altura mínima e ativa rolagem vertical
+      templateRows = `repeat(${rows}, minmax(${minHeight}px, 1fr))`;
+      autoRows = `minmax(${minHeight}px, 1fr)`;
+    }
+
+    this.gridEl.style.setProperty('--grid-cols', cols.toString());
+    this.gridEl.style.setProperty('--grid-template-rows', templateRows);
+    this.gridEl.style.setProperty('--grid-auto-rows', autoRows);
+
+    this.fitAll();
   }
 
   setLayout(layout) {
@@ -457,7 +569,8 @@ class TermixDashboard {
       'auto': window.t ? window.t('layout_auto') : 'Auto',
       '1col': window.t ? window.t('layout_1col') : '1 Col',
       '2col': window.t ? window.t('layout_2col') : '2 Col',
-      '3col': window.t ? window.t('layout_3col') : '3 Col'
+      '3col': window.t ? window.t('layout_3col') : '3 Col',
+      '4col': window.t ? window.t('layout_4col') : '4 Col'
     };
 
     const layoutIcons = {
@@ -478,6 +591,12 @@ class TermixDashboard {
                 <rect x="2" y="4" width="5" height="16" rx="1"></rect>
                 <rect x="9.5" y="4" width="5" height="16" rx="1"></rect>
                 <rect x="17" y="4" width="5" height="16" rx="1"></rect>
+              </svg>`,
+      '4col': `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="4" width="3.5" height="16" rx="1"></rect>
+                <rect x="7.5" y="4" width="3.5" height="16" rx="1"></rect>
+                <rect x="13" y="4" width="3.5" height="16" rx="1"></rect>
+                <rect x="18.5" y="4" width="3.5" height="16" rx="1"></rect>
               </svg>`
     };
 
@@ -494,7 +613,220 @@ class TermixDashboard {
       dropdownBtn.setAttribute('aria-expanded', 'false');
     }
 
+    this.updateGridLayout();
+  }
+
+  /**
+   * Sincroniza a ordem interna de instâncias de terminal a partir da ordem física do DOM
+   */
+  syncTerminalsOrderFromDom() {
+    const cards = Array.from(this.gridEl.querySelectorAll('.terminal-card'));
+    const newMap = new Map();
+    for (const card of cards) {
+      const id = card.getAttribute('data-id');
+      if (id && this.terminals.has(id)) {
+        newMap.set(id, this.terminals.get(id));
+      }
+    }
+    for (const [id, inst] of this.terminals) {
+      if (!newMap.has(id)) {
+        newMap.set(id, inst);
+      }
+    }
+    this.terminals = newMap;
+  }
+
+  /**
+   * Reordena os terminais na grade (usado por Drag & Drop)
+   */
+  reorderTerminals(sourceId, targetId, placeAfter = false) {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    const sourceInst = this.terminals.get(sourceId);
+    const targetInst = this.terminals.get(targetId);
+    if (!sourceInst || !targetInst) return;
+
+    const sourceCard = sourceInst.cardEl;
+    const targetCard = targetInst.cardEl;
+
+    if (placeAfter) {
+      if (targetCard.nextSibling) {
+        this.gridEl.insertBefore(sourceCard, targetCard.nextSibling);
+      } else {
+        this.gridEl.appendChild(sourceCard);
+      }
+    } else {
+      this.gridEl.insertBefore(sourceCard, targetCard);
+    }
+
+    this.syncTerminalsOrderFromDom();
+    this.updateGridLayout();
     this.fitAll();
+  }
+
+  /**
+   * Move o terminal para a esquerda / cima (-1) ou para a direita / baixo (+1)
+   */
+  moveTerminal(id, direction) {
+    const instance = this.terminals.get(id);
+    if (!instance) return;
+    const card = instance.cardEl;
+
+    if (direction < 0) {
+      const prev = card.previousElementSibling;
+      if (prev && prev.classList.contains('terminal-card')) {
+        this.gridEl.insertBefore(card, prev);
+        this.syncTerminalsOrderFromDom();
+        this.updateGridLayout();
+        this.fitAll();
+      }
+    } else if (direction > 0) {
+      const next = card.nextElementSibling;
+      if (next && next.classList.contains('terminal-card')) {
+        if (next.nextSibling) {
+          this.gridEl.insertBefore(card, next.nextSibling);
+        } else {
+          this.gridEl.appendChild(card);
+        }
+        this.syncTerminalsOrderFromDom();
+        this.updateGridLayout();
+        this.fitAll();
+      }
+    }
+  }
+
+  /**
+   * Duplica um terminal já aberto preservando host SSH, cwd e configurações
+   */
+  duplicateTerminal(id) {
+    const instance = this.terminals.get(id);
+    if (!instance) return null;
+
+    const newId = `term-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newTitle = `${instance.title} (Cópia)`;
+
+    if (instance.hostId) {
+      const host = this.savedHosts?.find(h => h.id === instance.hostId);
+      if (host) {
+        const newInst = new TerminalInstance(this, newId, newTitle);
+        newInst.hostId = host.id;
+        newInst.hostName = host.name;
+        newInst.cwd = instance.cwd || '';
+        newInst.startupCommand = instance.startupCommand || '';
+
+        // Insere o card logo após o terminal clonado
+        if (instance.cardEl && instance.cardEl.nextSibling) {
+          this.gridEl.insertBefore(newInst.cardEl, instance.cardEl.nextSibling);
+        } else {
+          this.gridEl.appendChild(newInst.cardEl);
+        }
+
+        this.terminals.set(newId, newInst);
+        this.syncTerminalsOrderFromDom();
+        this.updateGridState();
+        this.setActiveTerminal(newId);
+
+        const payload = {
+          id: host.id,
+          termId: newId,
+          cols: newInst.term.cols || 80,
+          rows: newInst.term.rows || 24
+        };
+
+        if (this.isElectron && window.termix?.hosts) {
+          window.termix.hosts.connect(payload);
+        } else if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({
+            action: 'connect_host',
+            hostId: host.id,
+            termId: newId,
+            cols: payload.cols,
+            rows: payload.rows
+          }));
+        }
+        return newInst;
+      }
+    }
+
+    // Terminal Local
+    const newInst = new TerminalInstance(this, newId, newTitle);
+    newInst.cwd = instance.cwd || '';
+    newInst.startupCommand = instance.startupCommand || '';
+
+    // Insere o card logo após o terminal clonado
+    if (instance.cardEl && instance.cardEl.nextSibling) {
+      this.gridEl.insertBefore(newInst.cardEl, instance.cardEl.nextSibling);
+    } else {
+      this.gridEl.appendChild(newInst.cardEl);
+    }
+
+    this.terminals.set(newId, newInst);
+    this.syncTerminalsOrderFromDom();
+    this.updateGridState();
+    this.setActiveTerminal(newId);
+
+    const payload = {
+      id: newId,
+      title: newTitle,
+      cwd: newInst.cwd || undefined,
+      startupCommand: newInst.startupCommand || undefined,
+      cols: newInst.term.cols || 80,
+      rows: newInst.term.rows || 24
+    };
+
+    if (this.isElectron) {
+      window.termix.createTerminal(payload);
+    } else if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ action: 'create', ...payload }));
+    }
+
+    return newInst;
+  }
+
+  /**
+   * Reconecta um terminal já aberto que sofreu broken pipe ou encerramento de processo
+   */
+  reconnectTerminal(id) {
+    const instance = this.terminals.get(id);
+    if (!instance) return;
+
+    const cols = instance.term.cols || 80;
+    const rows = instance.term.rows || 24;
+
+    if (instance.hostId) {
+      const payload = {
+        id: instance.hostId,
+        termId: id,
+        cols,
+        rows
+      };
+
+      if (this.isElectron && window.termix?.hosts) {
+        window.termix.hosts.connect(payload);
+      } else if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          action: 'connect_host',
+          hostId: instance.hostId,
+          termId: id,
+          cols,
+          rows
+        }));
+      }
+    } else {
+      const payload = {
+        id,
+        title: instance.title,
+        cwd: instance.cwd || undefined,
+        startupCommand: instance.startupCommand || undefined,
+        cols,
+        rows
+      };
+
+      if (this.isElectron) {
+        window.termix.createTerminal(payload);
+      } else if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ action: 'create', ...payload }));
+      }
+    }
   }
 
   toggleTheme() {
@@ -749,12 +1081,22 @@ class TermixDashboard {
       }
     });
 
-    // Auto fit ao redimensionar a janela do navegador
+    // Auto fit e recálculo da grade ao redimensionar / maximizar a janela do navegador
     let resizeDebounce = null;
-    window.addEventListener('resize', () => {
+    const handleWindowOrGridResize = () => {
       clearTimeout(resizeDebounce);
-      resizeDebounce = setTimeout(() => this.fitAll(), 100);
-    });
+      resizeDebounce = setTimeout(() => {
+        this.updateGridLayout();
+        this.fitAll();
+      }, 50);
+    };
+
+    window.addEventListener('resize', handleWindowOrGridResize);
+
+    if (window.ResizeObserver && this.gridEl) {
+      this.gridResizeObserver = new ResizeObserver(handleWindowOrGridResize);
+      this.gridResizeObserver.observe(this.gridEl);
+    }
   }
 
   /**
@@ -3834,6 +4176,11 @@ class TerminalInstance {
     this.cwd = '';
     this.startupCommand = '';
 
+    this.isExited = false;
+    this.isBrokenPipe = false;
+    this.recentBrokenPipeDetected = false;
+    this.hasExitError = false;
+
     this.createDom();
     this.initXterm();
   }
@@ -3851,22 +4198,69 @@ class TerminalInstance {
           <span class="traffic-dot dot-max" data-i18n-title="term_maximize_title" title="${window.t ? window.t('term_maximize_title') : 'Maximizar / Restaurar'}"></span>
         </div>
 
+        <div class="terminal-drag-handle" draggable="true" data-i18n-title="term_drag_title" title="${window.t ? window.t('term_drag_title') : 'Arrastar para reordenar terminal'}">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="8" cy="6" r="1.5"></circle>
+            <circle cx="16" cy="6" r="1.5"></circle>
+            <circle cx="8" cy="12" r="1.5"></circle>
+            <circle cx="16" cy="12" r="1.5"></circle>
+            <circle cx="8" cy="18" r="1.5"></circle>
+            <circle cx="16" cy="18" r="1.5"></circle>
+          </svg>
+        </div>
+
         <div class="terminal-card-title" data-i18n-title="term_rename_title" title="${window.t ? window.t('term_rename_title') : 'Dê duplo-clique para renomear'}">
           <span class="title-text">${this.title}</span>
         </div>
 
         <div class="terminal-card-tools">
           <span class="term-badge pid-badge">PID: ...</span>
+
+          <!-- Mover para a esquerda -->
+          <button class="btn-card-tool btn-move-left-tool" data-i18n-title="term_move_left_title" title="${window.t ? window.t('term_move_left_title') : 'Mover terminal para a esquerda'}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+
+          <!-- Mover para a direita -->
+          <button class="btn-card-tool btn-move-right-tool" data-i18n-title="term_move_right_title" title="${window.t ? window.t('term_move_right_title') : 'Mover terminal para a direita'}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+
+          <!-- Duplicar terminal -->
+          <button class="btn-card-tool btn-duplicate-tool" data-i18n-title="term_duplicate_title" title="${window.t ? window.t('term_duplicate_title') : 'Duplicar este terminal'}">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+
+          <!-- Reconectar processo (Broken pipe / reinício) -->
+          <button class="btn-card-tool btn-reconnect-tool" data-i18n-title="term_reconnect_title" title="${window.t ? window.t('term_reconnect_title') : 'Reconectar processo'}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+          </button>
+
+          <!-- Copilot IA -->
           <button class="btn-card-tool btn-ai-tool" data-i18n-title="btn_ai_title" title="${window.t ? window.t('btn_ai_title') : 'Assistente de IA / Copilot (⌘+I)'}">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"></path>
             </svg>
           </button>
+
+          <!-- Maximizar -->
           <button class="btn-card-tool btn-max-tool" data-i18n-title="term_maximize_title" title="${window.t ? window.t('term_maximize_title') : 'Maximizar / Restaurar'}">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
             </svg>
           </button>
+
+          <!-- Fechar -->
           <button class="btn-card-tool btn-close-tool" data-i18n-title="term_close_title" title="${window.t ? window.t('term_close_title') : 'Fechar'}">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -3884,6 +4278,11 @@ class TerminalInstance {
     this.titleTextEl = this.cardEl.querySelector('.title-text');
     this.pidBadgeEl = this.cardEl.querySelector('.pid-badge');
     this.btnAiTool = this.cardEl.querySelector('.btn-ai-tool');
+    this.btnDuplicateTool = this.cardEl.querySelector('.btn-duplicate-tool');
+    this.btnReconnectTool = this.cardEl.querySelector('.btn-reconnect-tool');
+    this.btnMoveLeftTool = this.cardEl.querySelector('.btn-move-left-tool');
+    this.btnMoveRightTool = this.cardEl.querySelector('.btn-move-right-tool');
+    this.dragHandleEl = this.cardEl.querySelector('.terminal-drag-handle');
 
     this.bindDomEvents();
   }
@@ -3892,6 +4291,77 @@ class TerminalInstance {
     this.cardEl.addEventListener('click', () => {
       this.dashboard.setActiveTerminal(this.id);
       this.focus();
+    });
+
+    // Drag and Drop para reordenar terminal
+    if (this.dragHandleEl) {
+      this.dragHandleEl.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', this.id);
+        e.dataTransfer.effectAllowed = 'move';
+        this.cardEl.classList.add('is-dragging');
+      });
+
+      this.dragHandleEl.addEventListener('dragend', () => {
+        this.cardEl.classList.remove('is-dragging');
+        document.querySelectorAll('.terminal-card').forEach(c => {
+          c.classList.remove('drag-target-before', 'drag-target-after');
+        });
+      });
+    }
+
+    this.cardEl.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = this.cardEl.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      const isAfter = e.clientX > midX;
+
+      if (isAfter) {
+        this.cardEl.classList.add('drag-target-after');
+        this.cardEl.classList.remove('drag-target-before');
+      } else {
+        this.cardEl.classList.add('drag-target-before');
+        this.cardEl.classList.remove('drag-target-after');
+      }
+    });
+
+    this.cardEl.addEventListener('dragleave', () => {
+      this.cardEl.classList.remove('drag-target-before', 'drag-target-after');
+    });
+
+    this.cardEl.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const sourceId = e.dataTransfer.getData('text/plain');
+      const rect = this.cardEl.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      const isAfter = e.clientX > midX;
+
+      this.cardEl.classList.remove('drag-target-before', 'drag-target-after');
+
+      if (sourceId && sourceId !== this.id) {
+        this.dashboard.reorderTerminals(sourceId, this.id, isAfter);
+      }
+    });
+
+    // Ações de Botões do Card
+    this.btnDuplicateTool?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.dashboard.duplicateTerminal(this.id);
+    });
+
+    this.btnReconnectTool?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.reconnect();
+    });
+
+    this.btnMoveLeftTool?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.dashboard.moveTerminal(this.id, -1);
+    });
+
+    this.btnMoveRightTool?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.dashboard.moveTerminal(this.id, 1);
     });
 
     this.btnAiTool?.addEventListener('click', (e) => {
@@ -4069,6 +4539,12 @@ class TerminalInstance {
 
     // Entrada do teclado enviada para o Electron IPC ou WebSocket
     this.term.onData((data) => {
+      if (this.isExited || this.isBrokenPipe) {
+        if (data === '\r' || data === '\n') {
+          this.reconnect();
+          return;
+        }
+      }
       this.dashboard.sendInput(this.id, data);
     });
 
@@ -4167,18 +4643,55 @@ class TerminalInstance {
   handleCreated(msg) {
     this.pid = msg.pid;
     this.shell = msg.shell;
+    this.isExited = false;
+    this.isBrokenPipe = false;
+    this.recentBrokenPipeDetected = false;
+    this.hasExitError = false;
+    this.exitCode = null;
+
+    if (this.btnReconnectTool) {
+      this.btnReconnectTool.classList.remove('btn-reconnect-pulse');
+      this.btnReconnectTool.title = window.t ? window.t('term_reconnect_title') : 'Reconectar processo';
+    }
+    if (this.btnAiTool) {
+      this.btnAiTool.classList.remove('btn-ai-error-pulse');
+      this.btnAiTool.title = window.t ? window.t('btn_ai_title') : 'Assistente de IA / Copilot (⌘+I)';
+    }
+
     this.pidBadgeEl.textContent = `PID: ${this.pid} (${this.shell})`;
+    this.pidBadgeEl.style.color = '';
     if (msg.title && this.titleTextEl) {
       this.titleTextEl.textContent = msg.title;
       this.title = msg.title;
     }
   }
 
-  handleExit(exitCode) {
+  handleExit(exitCode, signal) {
     this.exitCode = exitCode;
-    this.term.writeln(`\r\n\x1b[33m[Processo finalizado com código ${exitCode}]\x1b[0m\r\n`);
-    this.pidBadgeEl.textContent = `Encerrado (${exitCode})`;
-    this.pidBadgeEl.style.color = '#f43f5e';
+    this.isExited = true;
+
+    // Detecta broken pipe (SSH desconecta com código 255, SIGPIPE é sinal 'SIGPIPE' ou 141)
+    const isBrokenPipe = exitCode === 255 || signal === 'SIGPIPE' || exitCode === 141 || this.recentBrokenPipeDetected;
+    this.isBrokenPipe = isBrokenPipe;
+
+    if (isBrokenPipe) {
+      this.term.writeln(`\r\n\x1b[31;1m[Conexão interrompida: Broken Pipe / Perda de conexão]\x1b[0m`);
+      this.term.writeln(`\x1b[33m💡 Pressione \x1b[1mEnter\x1b[22m ou clique em \x1b[1mReconectar (↻)\x1b[22m no topo para restabelecer a sessão.\x1b[0m\r\n`);
+      this.pidBadgeEl.textContent = `Broken Pipe`;
+      this.pidBadgeEl.style.color = '#ef4444';
+    } else {
+      this.term.writeln(`\r\n\x1b[33m[Processo finalizado com código ${exitCode}${signal ? ` (${signal})` : ''}]\x1b[0m`);
+      this.term.writeln(`\x1b[90m💡 Pressione \x1b[1mEnter\x1b[22m ou clique em \x1b[1mReconectar (↻)\x1b[22m para reiniciar o shell.\x1b[0m\r\n`);
+      this.pidBadgeEl.textContent = `Encerrado (${exitCode})`;
+      this.pidBadgeEl.style.color = '#f43f5e';
+    }
+
+    if (this.btnReconnectTool) {
+      this.btnReconnectTool.classList.add('btn-reconnect-pulse');
+      this.btnReconnectTool.title = isBrokenPipe
+        ? (window.t ? window.t('term_broken_pipe_notice') : 'Broken Pipe detectado. Pressione Enter ou clique em Reconectar.')
+        : (window.t ? window.t('term_reconnect_title') : 'Reconectar processo (Enter)');
+    }
 
     if (exitCode !== 0 && exitCode !== null) {
       this.hasExitError = true;
@@ -4187,6 +4700,29 @@ class TerminalInstance {
         this.btnAiTool.title = `Erro detectado (código ${exitCode}). Clique para diagnosticar com IA!`;
       }
     }
+  }
+
+  reconnect() {
+    this.isExited = false;
+    this.isBrokenPipe = false;
+    this.hasExitError = false;
+    this.recentBrokenPipeDetected = false;
+    this.exitCode = null;
+
+    if (this.btnReconnectTool) {
+      this.btnReconnectTool.classList.remove('btn-reconnect-pulse');
+      this.btnReconnectTool.title = window.t ? window.t('term_reconnect_title') : 'Reconectar processo';
+    }
+    if (this.btnAiTool) {
+      this.btnAiTool.classList.remove('btn-ai-error-pulse');
+      this.btnAiTool.title = window.t ? window.t('btn_ai_title') : 'Assistente de IA / Copilot (⌘+I)';
+    }
+
+    this.pidBadgeEl.textContent = 'Reconectando...';
+    this.pidBadgeEl.style.color = '#38bdf8';
+    this.term.writeln(`\r\n\x1b[36m[Reconectando sessão...]\x1b[0m\r\n`);
+
+    this.dashboard.reconnectTerminal(this.id);
   }
 
   getRecentOutput(lineCount = 40) {

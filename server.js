@@ -554,7 +554,19 @@ wss.on('connection', (ws) => {
           {
             const session = terminals.get(id);
             if (session && typeof payload.data === 'string') {
-              session.ptyProcess.write(payload.data);
+              try {
+                session.ptyProcess.write(payload.data);
+              } catch (err) {
+                console.warn(`[Termix] Erro ao enviar input para [${id}] (Broken pipe?):`, err.message);
+                if (ws.readyState === ws.OPEN) {
+                  ws.send(JSON.stringify({
+                    action: 'error',
+                    id,
+                    code: 'EPIPE',
+                    message: `Broken pipe: falha de escrita no processo (${err.message})`
+                  }));
+                }
+              }
             }
           }
           break;

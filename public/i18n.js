@@ -42,6 +42,7 @@ const TERMIX_TRANSLATIONS = {
     layout_1col: '1 Coluna (Foco)',
     layout_2col: '2 Colunas',
     layout_3col: '3 Colunas',
+    layout_4col: '4 Colunas',
 
     // Topbar Buttons
     btn_workspaces_title: 'Workspaces Salvos (Alt + W ou ⌘ + ⇧ + W)',
@@ -78,6 +79,10 @@ const TERMIX_TRANSLATIONS = {
     term_copy_title: 'Copiar todo o conteúdo do buffer',
     term_duplicate_title: 'Duplicar este terminal',
     term_reconnect_title: 'Reconectar processo',
+    term_drag_title: 'Arrastar para reordenar terminal',
+    term_move_left_title: 'Mover terminal para a esquerda',
+    term_move_right_title: 'Mover terminal para a direita',
+    term_broken_pipe_notice: 'Broken Pipe detectado. Pressione Enter ou clique em Reconectar.',
     term_close_title: 'Fechar este terminal',
     term_status_active: 'Ativo',
     term_status_connecting: 'Conectando...',
@@ -347,6 +352,7 @@ const TERMIX_TRANSLATIONS = {
     layout_1col: '1 Column (Focus)',
     layout_2col: '2 Columns',
     layout_3col: '3 Columns',
+    layout_4col: '4 Columns',
 
     // Topbar Buttons
     btn_workspaces_title: 'Saved Workspaces (Alt + W or ⌘ + ⇧ + W)',
@@ -383,6 +389,10 @@ const TERMIX_TRANSLATIONS = {
     term_copy_title: 'Copy all buffer content',
     term_duplicate_title: 'Duplicate this terminal',
     term_reconnect_title: 'Reconnect process',
+    term_drag_title: 'Drag to reorder terminal',
+    term_move_left_title: 'Move terminal left',
+    term_move_right_title: 'Move terminal right',
+    term_broken_pipe_notice: 'Broken Pipe detected. Press Enter or click Reconnect.',
     term_close_title: 'Close this terminal',
     term_status_active: 'Active',
     term_status_connecting: 'Connecting...',
@@ -652,6 +662,7 @@ const TERMIX_TRANSLATIONS = {
     layout_1col: '1 Columna (Foco)',
     layout_2col: '2 Columnas',
     layout_3col: '3 Columnas',
+    layout_4col: '4 Columnas',
 
     // Topbar Buttons
     btn_workspaces_title: 'Espacios Guardados (Alt + W o ⌘ + ⇧ + W)',
@@ -688,6 +699,10 @@ const TERMIX_TRANSLATIONS = {
     term_copy_title: 'Copiar todo el contenido del búfer',
     term_duplicate_title: 'Duplicar este terminal',
     term_reconnect_title: 'Reconectar proceso',
+    term_drag_title: 'Arrastrar para reordenar terminal',
+    term_move_left_title: 'Mover terminal a la izquierda',
+    term_move_right_title: 'Mover terminal a la derecha',
+    term_broken_pipe_notice: 'Broken Pipe detectado. Presione Enter o haga clic en Reconectar.',
     term_close_title: 'Cerrar este terminal',
     term_status_active: 'Activo',
     term_status_connecting: 'Conectando...',
